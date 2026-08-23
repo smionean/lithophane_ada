@@ -1,0 +1,18 @@
+{
+    "ada.projectFile": "lithophane_ada.gpr",
+    "files.associations": {
+        "*.ads": "ada",
+        "*.adb": "ada"
+    },
+    "editor.rulers": [
+        79
+    ],
+    "editor.tabSize": 3,
+    "editor.insertSpaces": true,
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "files.exclude": {
+        "**/*.ali": true,
+        "**/*.o": true
+    }
+}

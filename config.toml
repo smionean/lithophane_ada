@@ -1,0 +1,7 @@
+input-name = "foo.png"
+output-name = "test"
+filter = "threshold"
+save-ascii = false
+save-binary = true
+save-pgm = true
+height = 10

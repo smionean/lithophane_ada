@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug lithophane",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/bin/main",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "alr: build"
+        }
+    ]
+}

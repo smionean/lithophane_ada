@@ -1,0 +1,28 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "alr: build",
+            "type": "shell",
+            "command": "alr build",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "alr: clean",
+            "type": "shell",
+            "command": "alr clean",
+            "problemMatcher": []
+        },
+        {
+            "label": "alr: run",
+            "type": "shell",
+            "command": "alr run",
+            "dependsOn": "alr: build",
+            "problemMatcher": "$gcc"
+        }
+    ]
+}

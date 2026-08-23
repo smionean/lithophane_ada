@@ -1,0 +1,7 @@
+{
+    "recommendations": [
+        "AdaCore.ada",
+        "AdaCore.alire-vscode",
+        "vadimcn.vscode-lldb"
+    ]
+}

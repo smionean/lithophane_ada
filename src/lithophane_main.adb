@@ -14,18 +14,20 @@ with Lithophane;         use Lithophane;
 with Lithophane.STL;     use Lithophane.STL;
 with Lithophane.Filters; use Lithophane.Filters;
 
-procedure Lithophane_Ada is
+procedure Lithophane_Main is
 
    Lithophane_Version : constant String := "0.1.0";
 
    procedure Version is
    begin
-      Put_Line (Standard_Error, "Lithophane_ada " & Lithophane_Version);
+      Put_Line (Standard_Error, "Lithophane " & Lithophane_Version);
    end Version;
 
    procedure Help is
    begin
       Version;
+      Put_Line (Standard_Error, "Usage: lithophane [options] <input_file>");
+      Put_Line (Standard_Error, "Options:");
       Put_Line (Standard_Error, "-h --help");
       --  Put_Line (Standard_Error, "-f<a_filter> --filter=<a_filter>");
       Put_Line (Standard_Error, "-b --save-binary");
@@ -335,4 +337,4 @@ begin
 
    PreProcess_Image (Settings);
 
-end Lithophane_Ada;
+end Lithophane_Main;

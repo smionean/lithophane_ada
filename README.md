@@ -1,11 +1,11 @@
-# lithophane_ada
+# lithophane
 [![Static Badge](https://img.shields.io/badge/Ada-2022-blue)](https://ada-lang.io/docs/arm)
 
 Generate [lithophane](https://en.wikipedia.org/wiki/Lithophane) with Ada.
 
 **Usage**
 ```
-lithophane_ada IMAGE_FILENAME
+lithophane [options] <input_file>
 ```
 
 **Options**

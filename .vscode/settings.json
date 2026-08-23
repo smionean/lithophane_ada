@@ -1,5 +1,5 @@
 {
-    "ada.projectFile": "lithophane_ada.gpr",
+    "ada.projectFile": "lithophane.gpr",
     "files.associations": {
         "*.ads": "ada",
         "*.adb": "ada"

@@ -1,4 +1,4 @@
-name = "lithophane_ada"
+name = "lithophane"
 description = "Lithophane generator with Ada"
 version = "0.1.0"
 
@@ -9,7 +9,7 @@ licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
 website = ""
 tags = ["3dprint", "lithophane", "lithography"]
 
-executables = ["lithophane_ada"]
+executables = ["lithophane"]
 
 [[depends-on]]
 gid = "^14.0.0"

@@ -1,6 +1,6 @@
 name = "lithophane_ada"
 description = "Lithophane generator with Ada"
-version = "0.1.0-dev"
+version = "0.1.0"
 
 authors = ["Simon Bean"]
 maintainers = ["Simon Bean <smionean@gmail.com>"]

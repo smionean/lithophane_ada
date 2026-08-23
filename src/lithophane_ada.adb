@@ -16,7 +16,7 @@ with Lithophane.Filters; use Lithophane.Filters;
 
 procedure Lithophane_Ada is
 
-   Lithophane_Version : constant String := "0.1.0-dev";
+   Lithophane_Version : constant String := "0.1.0";
 
    procedure Version is
    begin

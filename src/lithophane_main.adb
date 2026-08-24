@@ -64,7 +64,7 @@ procedure Lithophane_Main is
       --
       procedure Set_X_Y (x, y : Natural) is
       begin
-         idx := 3 * (x + image_width * (image_height - 1 - y));
+         idx := 3 * (x + image_width * y);
       end Set_X_Y;
       --
       procedure Put_Pixel
@@ -215,9 +215,10 @@ procedure Lithophane_Main is
                end if;
             end if;
             grey :=
-              Color_Type
-                (0.2989 * Float (rouge) + 0.5870 * Float (vert)
-                 + 0.1140 * Float (bleu));
+              255
+              - Color_Type
+                  (0.2989 * Float (rouge) + 0.5870 * Float (vert)
+                   + 0.1140 * Float (bleu));
             --  Put_Line ("GREY " & grey'Img);
             matgrey (c, l) := grey;
 

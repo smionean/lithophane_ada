@@ -234,31 +234,31 @@ package body Lithophane.STL is
             end Visit;
          begin
             for J in Jy0 .. Jy1 - 1 loop
-               --  côté gauche
+               --  left side
                Visit ((Float (Ix0), Float (J), Z));
             end loop;
             for I in Ix0 .. Ix1 - 1 loop
-               --  côté haut
+               --  top side
                Visit ((Float (I), Float (Jy1), Z));
             end loop;
             for J in reverse Jy0 + 1 .. Jy1 loop
-               --  côté droit
+               --  right side
                Visit ((Float (Ix1), Float (J), Z));
             end loop;
             for I in reverse Ix0 + 1 .. Ix1 loop
-               --  côté bas
+               --  bottom side
                Visit ((Float (I), Float (Jy0), Z));
             end loop;
-            Visit (First_Point);                       --  ferme la boucle
+            Visit (First_Point);                       --  closes the loop
          end;
       end Emit_Flat_Rect_Fan;
 
    begin
       Done.all := [others => [others => False]];
 
-      --  Le fond est toujours plat sur toute la grille : un seul éventail
-      --  suffit pour tout le pourtour, au lieu d'une paire de triangles
-      --  par pixel.
+      --  The bottom is always flat across the whole grid: a single fan
+      --  is enough for the entire perimeter, instead of a pair of
+      --  triangles per pixel.
       if Last_I > First_I and then Last_J > First_J then
          Emit_Flat_Rect_Fan
            (First_I, Last_I, First_J, Last_J, Width, Clockwise => True);
@@ -284,9 +284,9 @@ package body Lithophane.STL is
                   Float (the_matrix (I + 1, J + 1)) / Reductor);
             begin
 
-               --  Surface : fusionne les cellules plates voisines en un
-               --  seul rectangle (greedy meshing), sinon triangulation
-               --  d'origine, pixel par pixel, géométrie inchangée.
+               --  Surface: merges neighbouring flat cells into a single
+               --  rectangle (greedy meshing), otherwise falls back to the
+               --  original per-pixel triangulation, geometry unchanged.
                if not Done (I, J) then
                   if Is_Flat_Cell (I, J) then
                      declare
@@ -336,11 +336,11 @@ package body Lithophane.STL is
                   end if;
                end if;
 
-               --  Côtés : toujours par cellule unitaire. Le pourtour ne
-               --  bénéficie pas de la fusion mais reste bon marché
-               --  (proportionnel au périmètre, pas à la surface) et doit
-               --  rester à la résolution du pixel pour raccorder
-               --  exactement le fond et la surface, fusionnés ou non.
+               --  Sides: always per unit cell. The perimeter does not
+               --  benefit from merging but stays cheap (proportional to
+               --  the perimeter, not the surface) and must stay at
+               --  pixel resolution to exactly connect the bottom and
+               --  the surface, whether merged or not.
                if I = First_I then
                   Emit_ACB
                     (P00,

@@ -16,7 +16,7 @@ with Lithophane.Filters; use Lithophane.Filters;
 
 procedure Lithophane_Main is
 
-   Lithophane_Version : constant String := "0.1.0";
+   Lithophane_Version : constant String := "0.1.1";
 
    procedure Version is
    begin
@@ -64,7 +64,7 @@ procedure Lithophane_Main is
       --
       procedure Set_X_Y (x, y : Natural) is
       begin
-         idx := 3 * (x + image_width * (image_height - 1 - y));
+         idx := 3 * (x + image_width * y);
       end Set_X_Y;
       --
       procedure Put_Pixel
@@ -126,7 +126,7 @@ procedure Lithophane_Main is
      (the_image : Matrix_Access; Settings : Settings_Record) is
    begin
 
-      --  appliquer un filtre
+      --  apply a filter
       if Settings.save_as_binary then
          Apply_Threshold_Filter (the_image, 128);
       end if;
@@ -134,7 +134,7 @@ procedure Lithophane_Main is
    end Process_Image;
 
    --
-   --  Pretraite_Image
+   --  PreProcess_Image
    --
    procedure PreProcess_Image (Settings : Settings_Record) is
 
@@ -155,13 +155,13 @@ procedure Lithophane_Main is
       Open (F, In_File, Ada.Strings.Unbounded.To_String (Settings.filename));
       Put_Line
         (Standard_Error,
-         "Traite "
+         "Processing image file: "
          & Ada.Strings.Unbounded.To_String (Settings.filename)
          & "...");
 
       GID.Load_Image_Header
         (img_descrp,  --  in out
-         Stream (F).all,  --  stream; lit le contenu du fichier
+         Stream (F).all,  --  stream; reads the file's content
          try_tga =>
            Ada.Strings.Unbounded.To_String (Settings.filename)'Length >= 4
            and then up_name (up_name'Last - 3 .. up_name'Last) = ".TGA");
@@ -215,9 +215,10 @@ procedure Lithophane_Main is
                end if;
             end if;
             grey :=
-              Color_Type
-                (0.2989 * Float (rouge) + 0.5870 * Float (vert)
-                 + 0.1140 * Float (bleu));
+              255
+              - Color_Type
+                  (0.2989 * Float (rouge) + 0.5870 * Float (vert)
+                   + 0.1140 * Float (bleu));
             --  Put_Line ("GREY " & grey'Img);
             matgrey (c, l) := grey;
 

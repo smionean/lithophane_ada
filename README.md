@@ -4,8 +4,9 @@
 
 Create [lithophane](https://en.wikipedia.org/wiki/Lithophane) of your favourite picture with Ada.
 
-![Lithophane_Logo](./doc/img/ada.logo.png)
-![Lithophane_Logo](./doc/img/lithophane_stl.png)
+<img src="./doc/img/ada.logo.png" alt="Lithophane_Logo" width="200">
+<img src="./doc/img/lithophane_stl.png" alt="Lithophane_STL" width="200">
+
 
 **Usage**
 ```

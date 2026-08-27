@@ -16,7 +16,7 @@ with Lithophane.Filters; use Lithophane.Filters;
 
 procedure Lithophane_Main is
 
-   Lithophane_Version : constant String := "0.1.1";
+   Lithophane_Version : constant String := "0.1.2";
 
    procedure Version is
    begin
@@ -127,9 +127,22 @@ procedure Lithophane_Main is
    begin
 
       --  apply a filter
-      if Settings.save_as_binary then
-         Apply_Threshold_Filter (the_image, 128);
-      end if;
+      case Settings.filter is
+         when bartlett  =>
+            Apply_Filter (the_image, Create_Bartlett_Filter (3, 3));
+
+         when gauss     =>
+            Apply_Filter (the_image, Create_Gauss_Filter (3, 3));
+
+         when square    =>
+            Apply_Filter (the_image, Create_Square_Filter (3, 3));
+
+         when sharpen   =>
+            Apply_Filter (the_image, Create_Sharpen_Filter (3, 3));
+
+         when threshold =>
+            Apply_Threshold_Filter (the_image, 128);
+      end case;
 
    end Process_Image;
 
@@ -309,6 +322,7 @@ begin
                Version;
             elsif Full_Switch = "-filter" then
                Put_Line ("Seen --filter with arg=" & Parameter);
+               Settings.filter := Lithophane.Filters_Choice'Value (Parameter);
             elsif Full_Switch = "-save-binary" then
                Put_Line ("Seen --save-binary");
                Settings.save_as_binary := True;

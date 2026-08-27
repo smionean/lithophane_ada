@@ -53,7 +53,8 @@ package body Lithophane is
       if Table.Kind /= TOML.TOML_Table then
          Put_Line
            (Standard_Error,
-            "invalid config file " & Config_Name
+            "invalid config file "
+            & Config_Name
             & ": top-level value must be a table");
          return;
       end if;
@@ -89,6 +90,12 @@ package body Lithophane is
          V := Field ("save-pgm", TOML.TOML_Boolean);
          if V.Is_Present then
             Settings.save_pgm := TOML.As_Boolean (V);
+         end if;
+
+         V := Field ("filter", TOML.TOML_String);
+         if V.Is_Present then
+            Settings.filter :=
+              Lithophane.Filters_Choice'Value (TOML.As_String (V));
          end if;
       end;
 

@@ -1,7 +1,5 @@
 package Lithophane.Filters is
 
-   type Filters_Choice is (bartlett, gauss, square, sharpen);
-
    function Create_Bartlett_Filter
      (X : Integer; Y : Integer) return Matrix_Filter_Type
    with Pre => X = Y and then X mod 2 = 1;

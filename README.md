@@ -69,7 +69,6 @@ height = 10
 * add filters option
 * add borders option
 * add height option
-* implement config file parsing (`-c`/`--config`)
 
 
 Based on [GID](https://gen-img-dec.sourceforge.io)

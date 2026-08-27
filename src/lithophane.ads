@@ -5,9 +5,11 @@ with Ada.Strings.Unbounded;
 package Lithophane is
    pragma Elaborate_Body;
 
+   type Filters_Choice is (bartlett, gauss, square, sharpen, threshold);
+
    type Settings_Record is record
       height         : Natural := 0;
-      --  filter         : Filters_Choice;  --  := sharpen;
+      filter         : Filters_Choice := threshold;
       save_as_binary : Boolean := True;
       save_as_ascii  : Boolean := False;
       save_pgm       : Boolean := False;

@@ -58,6 +58,9 @@ package Lithophane is
      (the_matrix : Matrix_Access;
       F          : Ada.Text_IO.File_Type := Standard_Output);
 
-   procedure Parse_Config (Settings : Settings_Record);
+   procedure Parse_Config (Settings : in out Settings_Record);
+   --  Read the TOML file named by Settings.config and override the matching
+   --  fields of Settings with the values it contains. On error, a diagnostic
+   --  is printed on Standard_Error and Settings is left unchanged.
 
 end Lithophane;

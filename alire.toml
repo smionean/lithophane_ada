@@ -63,8 +63,8 @@ height = 10
 """
 version = "0.1.1"
 
-authors = ["Simon Beàn"]
-maintainers = ["Simon Beàn <smionean@gmail.com>"]
+authors = ["Simon BeÃ n"]
+maintainers = ["Simon BeÃ n <smionean@gmail.com>"]
 maintainers-logins = ["smionean"]
 licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
 website = "https://github.com/smionean/lithophane_ada"
@@ -80,3 +80,6 @@ getopt = "^2.0.0"
 
 [build-switches]
 "*".Ada_Version = "Ada2022"
+
+[[depends-on]]
+ada_toml = "~0.5.0"

@@ -7,16 +7,21 @@ package Lithophane is
 
    type Filters_Choice is (bartlett, gauss, square, sharpen, threshold);
 
+   type Color_Type is new Integer range 0 .. 255;
+   type Grey_Type is new Float range 0.0 .. 1.0;
+
    type Settings_Record is record
-      height         : Natural := 0;
-      filter         : Filters_Choice := threshold;
-      save_as_binary : Boolean := True;
-      save_as_ascii  : Boolean := False;
-      save_pgm       : Boolean := False;
-      filename       : Ada.Strings.Unbounded.Unbounded_String;
-      outfilename    : Ada.Strings.Unbounded.Unbounded_String :=
+      height           : Natural := 0;
+      filter           : Filters_Choice := threshold;
+      filter_size      : Natural := 3;
+      filter_threshold : Color_Type := 128;
+      save_as_binary   : Boolean := True;
+      save_as_ascii    : Boolean := False;
+      save_pgm         : Boolean := False;
+      filename         : Ada.Strings.Unbounded.Unbounded_String;
+      outfilename      : Ada.Strings.Unbounded.Unbounded_String :=
         Ada.Strings.Unbounded.To_Unbounded_String ("test");
-      config         : Ada.Strings.Unbounded.Unbounded_String;
+      config           : Ada.Strings.Unbounded.Unbounded_String;
    end record;
 
    type Vector is record
@@ -41,9 +46,6 @@ package Lithophane is
    package Facets is new
      Ada.Containers.Vectors (Index_Type => Positive, Element_Type => Facet);
 
-   type Color_Type is new Integer range 0 .. 255;
-   type Grey_Type is new Float range 0.0 .. 1.0;
-
    type Matrix_Type is
      array (Natural range <>, Natural range <>) of Color_Type;
 
@@ -54,7 +56,8 @@ package Lithophane is
    type Matrix_Grey_Access is access Matrix_Grey_Type;
 
    type Matrix_Filter_Type is
-     array (Positive range <>, Positive range <>) of Natural;
+     array (Positive range <>, Positive range <>) of Integer;
+   --  Filter weights may be negative (e.g. the sharpen kernel).
 
    procedure Print_Matrix
      (the_matrix : Matrix_Access;

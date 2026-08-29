@@ -19,6 +19,15 @@ package Lithophane.Filters is
    --  procedure Apply_Gauss;
    --  procedure Apply_Square;
    --  procedure Apply_Sharpen;
+   function Apply_On_Point
+     (the_image  : Matrix_Type;
+      pos_c      : Natural;
+      pos_l      : Natural;
+      the_filter : Matrix_Filter_Type) return Color_Type;
+   --  Convolve the_filter, centred on (pos_c, pos_l), with the_image and
+   --  return the normalised (sum of the filter weights) result, clamped to
+   --  Color_Type. Positions outside the image are clamped to its edges.
+
    procedure Apply_Filter
      (the_image : Matrix_Access; the_filter : Matrix_Filter_Type);
 

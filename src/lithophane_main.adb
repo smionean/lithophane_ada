@@ -129,19 +129,31 @@ procedure Lithophane_Main is
       --  apply a filter
       case Settings.filter is
          when bartlett  =>
-            Apply_Filter (the_image, Create_Bartlett_Filter (3, 3));
+            Apply_Filter
+              (the_image,
+               Create_Bartlett_Filter
+                 (Settings.filter_size, Settings.filter_size));
 
          when gauss     =>
-            Apply_Filter (the_image, Create_Gauss_Filter (3, 3));
+            Apply_Filter
+              (the_image,
+               Create_Gauss_Filter
+                 (Settings.filter_size, Settings.filter_size));
 
          when square    =>
-            Apply_Filter (the_image, Create_Square_Filter (3, 3));
+            Apply_Filter
+              (the_image,
+               Create_Square_Filter
+                 (Settings.filter_size, Settings.filter_size));
 
          when sharpen   =>
-            Apply_Filter (the_image, Create_Sharpen_Filter (3, 3));
+            Apply_Filter
+              (the_image,
+               Create_Sharpen_Filter
+                 (Settings.filter_size, Settings.filter_size));
 
          when threshold =>
-            Apply_Threshold_Filter (the_image, 128);
+            Apply_Threshold_Filter (the_image, Settings.filter_threshold);
       end case;
 
    end Process_Image;

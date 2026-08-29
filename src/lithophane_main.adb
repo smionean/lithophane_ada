@@ -29,7 +29,13 @@ procedure Lithophane_Main is
       Put_Line (Standard_Error, "Usage: lithophane [options] <input_file>");
       Put_Line (Standard_Error, "Options:");
       Put_Line (Standard_Error, "-h --help");
-      --  Put_Line (Standard_Error, "-f<a_filter> --filter=<a_filter>");
+      Put_Line
+        (Standard_Error,
+         "-f<a_filter> --filter <a_filter> [<n>] ; <a_filter> is one of"
+         & " bartlett, gauss, square, sharpen, threshold. The optional <n>"
+         & " that follows is the filter size (odd number) or, for the"
+         & " threshold filter, the threshold value 0 .. 255."
+         & " Example: lithophane --filter gauss 5 image.png");
       Put_Line (Standard_Error, "-b --save-binary");
       Put_Line (Standard_Error, "-a --save-ascii");
       Put_Line (Standard_Error, "-p --save-pgm");
@@ -278,6 +284,40 @@ procedure Lithophane_Main is
    end PreProcess_Image;
 
    Settings : Settings_Record;
+
+   --  Set as soon as a --filter/-f switch is seen. It tells the code after the
+   --  Getopt loop that the next positional argument (if it is a number) is the
+   --  filter parameter: filter_threshold for the threshold filter, filter_size
+   --  for every other filter. Example: lithophane --filter gauss 5 image.png
+   Filter_Given : Boolean := False;
+
+   --  Read the numeric argument that follows a --filter switch, if any, and
+   --  store it in the relevant Settings field. When the next argument is not a
+   --  plain number it is the input file name instead, so keep it for later.
+   procedure Get_Filter_Argument is
+      Extra : constant String := Get_Argument;
+   begin
+      if Extra = "" then
+         return;
+      elsif (for all C of Extra => C in '0' .. '9') then
+         if Settings.filter = Lithophane.threshold
+           and then Color_Type'Value (Extra) >= 0
+           and then Color_Type'Value (Extra) <= 255
+         then
+            Settings.filter_threshold := Color_Type'Value (Extra);
+            Put_Line ("Filter threshold =" & Settings.filter_threshold'Img);
+         elsif Natural'Value (Extra) >= 3
+           and then Natural'Value (Extra) mod 2 = 1
+         then
+            Settings.filter_size := Natural'Value (Extra);
+            Put_Line ("Filter size =" & Settings.filter_size'Img);
+         end if;
+      else
+         Settings.filename :=
+           Ada.Strings.Unbounded.To_Unbounded_String (Extra);
+      end if;
+   end Get_Filter_Argument;
+
 begin
    if Argument_Count < 1 then
       Help;
@@ -297,6 +337,11 @@ begin
          when 'v'    =>
             Version;
             return;
+
+         when 'f'    =>
+            Put_Line ("Seen -f with arg=" & Parameter);
+            Settings.filter := Lithophane.Filters_Choice'Value (Parameter);
+            Filter_Given := True;
 
          when 'b'    =>
             Put_Line ("Save stl-bin");
@@ -335,6 +380,7 @@ begin
             elsif Full_Switch = "-filter" then
                Put_Line ("Seen --filter with arg=" & Parameter);
                Settings.filter := Lithophane.Filters_Choice'Value (Parameter);
+               Filter_Given := True;
             elsif Full_Switch = "-save-binary" then
                Put_Line ("Seen --save-binary");
                Settings.save_as_binary := True;
@@ -359,8 +405,14 @@ begin
             exit;
       end case;
    end loop;
-   Settings.filename :=
-     Ada.Strings.Unbounded.To_Unbounded_String (Get_Argument);
+   if Filter_Given then
+      Get_Filter_Argument;
+   end if;
+
+   if Ada.Strings.Unbounded.Length (Settings.filename) = 0 then
+      Settings.filename :=
+        Ada.Strings.Unbounded.To_Unbounded_String (Get_Argument);
+   end if;
 
    PreProcess_Image (Settings);
 

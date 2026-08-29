@@ -8,9 +8,14 @@ Create [lithophane](https://en.wikipedia.org/wiki/Lithophane) of your favourite 
 <img src="./doc/img/lithophane_stl.png" alt="Lithophane_STL" width="200">
 
 
+**Build**
+```
+alr build
+```
+
 **Usage**
 ```
-lithophane [options] <input_file>
+bin/lithophane [options] <input_file>
 ```
 
 `<input_file>` is the picture to convert (any format supported by
@@ -25,7 +30,7 @@ lithophane [options] <input_file>
 -p --save-pgm
 -o<name> --output-name=<name>
 -H<height> --height=<height>
--f<filter> --filter=<filter>
+-f<filter> --filter <filter> [<n>]
 -c<file> --config=<file>
 ```
 
@@ -38,35 +43,49 @@ lithophane [options] <input_file>
 | `-p`, `--save-pgm` | also dump the grayscale-converted image as a PGM file: `<output-name>.pgm` |
 | `-o<name>`, `--output-name=<name>` | base name used for every output file above (default: `test`) |
 | `-H<height>`, `--height=<height>` | target height of the lithophane |
-| `-f<filter>`, `--filter=<filter>` | image filter to apply before conversion |
+| `-f<filter>`, `--filter <filter> [<n>]` | image filter to apply before conversion; `<filter>` is one of `bartlett`, `gauss`, `square`, `sharpen`, `threshold`. The optional number `<n>` right after the filter name is the kernel size (an odd number, default `3`) for `bartlett`/`gauss`/`square`/`sharpen`, or the cut value `0..255` (default `128`) for `threshold`. |
 | `-c<file>`, `--config=<file>` | read options from a config file instead of (or in addition to) the command line; when given, it overrides any previous option |
 
 You can combine `-a`, `-b` and `-p`: each one adds its own output file, they are
 not mutually exclusive.
 
+The `<n>` argument is positional and optional, so both of these work:
+```
+bin/lithophane --filter gauss 5 doc/img/ada.logo.png
+bin/lithophane --filter threshold 200 doc/img/ada.logo.png
+bin/lithophane --filter sharpen doc/img/ada.logo.png
+```
+
 **Config file**
 
-`-c`/`--config` points to a TOML file such as [config.toml](config.toml):
+`-c`/`--config` points to a TOML file such as [config.toml](doc/example/config.toml):
 ```toml
 input-name = "foo.png"
 output-name = "test"
 filter = "threshold"
+filter_size = 3
+filter_threshold = 128
 save-ascii = false
 save-binary = true
 save-pgm = true
 height = 10
 ```
 
+Every key is optional; a missing key keeps its default. `filter_size` must be a
+positive odd integer and `filter_threshold` must be in `0..255`, otherwise the
+key is ignored. The config file is read at the point where `-c`/`--config`
+appears on the command line, so options placed *after* it still take effect.
+
 > [!NOTE]
-> `-f`/`--filter`, `-H`/`--height` and `-c`/`--config` are already accepted on
-> the command line but are not wired up yet: filters, height scaling and the
-> config file are parsed but have no effect on the generated STL for now
-> (see TODO below). The only filter currently applied is a fixed threshold at
-> mid-grey, done automatically when saving to binary STL.
+> `-f`/`--filter` and `-c`/`--config` are wired up: the selected filter (and its
+> size / threshold) is applied to the grayscale image before the STL is
+> generated, and the config file overrides the matching settings. `-H`/`--height`
+> is still parsed but height scaling has no effect on the generated STL for now
+> (see TODO below). When no filter is selected, a threshold filter at mid-grey
+> (`128`) is applied by default.
 
 **TODO**
 * add resize option
-* add filters option
 * add borders option
 * add height option
 

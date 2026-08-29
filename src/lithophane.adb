@@ -97,10 +97,24 @@ package body Lithophane is
             Settings.filter :=
               Lithophane.Filters_Choice'Value (TOML.As_String (V));
          end if;
-      end;
 
-      --  The "filter" key is accepted but ignored for now: Settings_Record
-      --  has no filter field wired up yet (see TODO in the README).
+         V := Field ("filter_size", TOML.TOML_Integer);
+         if V.Is_Present
+           and then TOML.As_Integer (V) >= 0
+           and then TOML.As_Integer (V) mod 2 = 1
+         then
+            Settings.filter_size := Natural (TOML.As_Integer (V));
+         end if;
+
+         V := Field ("filter_threshold", TOML.TOML_Integer);
+         if V.Is_Present
+           and then TOML.As_Integer (V) >= 0
+           and then TOML.As_Integer (V) <= 255
+         then
+            Settings.filter_threshold := Color_Type (TOML.As_Integer (V));
+         end if;
+
+      end;
 
       Put_Line (Config_Name & " loaded with success!");
    end Parse_Config;

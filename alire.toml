@@ -61,7 +61,7 @@ height = 10
 > (see TODO below). The only filter currently applied is a fixed threshold at
 > mid-grey, done automatically when saving to binary STL.
 """
-version = "0.1.1"
+version = "0.1.2"
 
 authors = ["Simon BeÃ n"]
 maintainers = ["Simon BeÃ n <smionean@gmail.com>"]

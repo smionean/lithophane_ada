@@ -41,6 +41,7 @@ procedure Lithophane_Main is
       Put_Line (Standard_Error, "-p --save-pgm");
       Put_Line (Standard_Error, "-o<a_filename> --output-name=<a_filename>");
       Put_Line (Standard_Error, "-H<a_height> --height=<a_height>");
+      Put_Line (Standard_Error, "-B<a_border> --border=<a_border>");
       Put_Line
         (Standard_Error,
          "-c<a_config_file> --config=<a_config_file> ; note:  it overwrites"
@@ -211,35 +212,47 @@ procedure Lithophane_Main is
       declare
          matr       : constant Matrix_Access :=
            new Matrix_Type
-                 (1 .. GID.Pixel_Width (img_descrp),
-                  1 .. GID.Pixel_Height (img_descrp));
+                 (1 .. GID.Pixel_Width (img_descrp) + 2 * Settings.border,
+                  1 .. GID.Pixel_Height (img_descrp) + 2 * Settings.border);
          matg       : constant Matrix_Access :=
            new Matrix_Type
-                 (1 .. GID.Pixel_Width (img_descrp),
-                  1 .. GID.Pixel_Height (img_descrp));
+                 (1 .. GID.Pixel_Width (img_descrp) + 2 * Settings.border,
+                  1 .. GID.Pixel_Height (img_descrp) + 2 * Settings.border);
          matb       : constant Matrix_Access :=
            new Matrix_Type
-                 (1 .. GID.Pixel_Width (img_descrp),
-                  1 .. GID.Pixel_Height (img_descrp));
+                 (1 .. GID.Pixel_Width (img_descrp) + 2 * Settings.border,
+                  1 .. GID.Pixel_Height (img_descrp) + 2 * Settings.border);
          matgrey    : constant Matrix_Access :=
            new Matrix_Type
-                 (1 .. GID.Pixel_Width (img_descrp),
-                  1 .. GID.Pixel_Height (img_descrp));
+                 (1 .. GID.Pixel_Width (img_descrp) + 2 * Settings.border,
+                  1 .. GID.Pixel_Height (img_descrp) + 2 * Settings.border);
          tempString : String (1 .. 3);
       begin
          Put_Line ("IMGBUF " & img_buf'First'Img);
+         for i in matr'Range (1) loop
+            for j in matr'Range (2) loop
+               matr (i, j) := 255;
+               matg (i, j) := 255;
+               matb (i, j) := 255;
+               matgrey (i, j) := 255;
+            end loop;
+         end loop;
+
          while x <= img_buf'Last loop
-            matr (c, l) := Color_Type (img_buf (x));
+            matr (c + Settings.border, l + Settings.border) :=
+              Color_Type (img_buf (x));
             rouge := Color_Type (img_buf (x));
             --  (Standard_Error, 'r');
             x := x + 1;
             if x <= img_buf'Last then
-               matg (c, l) := Color_Type (img_buf (x));
+               matg (c + Settings.border, l + Settings.border) :=
+                 Color_Type (img_buf (x));
                vert := Color_Type (img_buf (x));
                --  Put (Standard_Error, 'b');
                x := x + 1;
                if x <= img_buf'Last then
-                  matb (c, l) := Color_Type (img_buf (x));
+                  matb (c + Settings.border, l + Settings.border) :=
+                    Color_Type (img_buf (x));
                   bleu := Color_Type (img_buf (x));
                --  Put (Standard_Error, 'g');
 
@@ -251,7 +264,7 @@ procedure Lithophane_Main is
                   (0.2989 * Float (rouge) + 0.5870 * Float (vert)
                    + 0.1140 * Float (bleu));
             --  Put_Line ("GREY " & grey'Img);
-            matgrey (c, l) := grey;
+            matgrey (c + Settings.border, l + Settings.border) := grey;
 
             img_buf (x - 2) := Unsigned_8 (grey);
             img_buf (x - 1) := Unsigned_8 (grey);
@@ -327,7 +340,8 @@ begin
    loop
       case Getopt
              ("h -help v -version f: -filter= b -save-binary a -save-ascii"
-              & " p -save-pgm o: -output-name= H: --height= c: -config=")
+              & " p -save-pgm o: -output-name= H: --height= B: -border="
+              & " c: -config=")
       is
          when 'h'    =>
             Put_Line ("Get help");
@@ -362,6 +376,10 @@ begin
             Put_Line ("Height");
             Settings.height := Natural'Value (Parameter);
 
+         when 'B'    =>
+            Put_Line ("Border");
+            Settings.border := Natural'Value (Parameter);
+
          when 'c'    =>
             Settings.config :=
               Ada.Strings.Unbounded.To_Unbounded_String (Parameter);
@@ -390,6 +408,9 @@ begin
             elsif Full_Switch = "-height" then
                Settings.height := Natural'Value (Parameter);
                Put_Line ("Seen --height with arg=" & Settings.height'Img);
+            elsif Full_Switch = "-border" then
+               Settings.border := Natural'Value (Parameter);
+               Put_Line ("Seen --border with arg=" & Settings.border'Img);
             elsif Full_Switch = "-output-name" then
                Settings.outfilename :=
                  Ada.Strings.Unbounded.To_Unbounded_String (Parameter);

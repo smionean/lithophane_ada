@@ -12,6 +12,7 @@ package Lithophane is
 
    type Settings_Record is record
       height           : Natural := 0;
+      border           : Natural := 20;
       filter           : Filters_Choice := threshold;
       filter_size      : Natural := 3;
       filter_threshold : Color_Type := 128;

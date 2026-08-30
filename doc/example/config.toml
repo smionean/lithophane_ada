@@ -3,6 +3,7 @@ output-name = "test"
 filter = "threshold"
 filter_size = 3
 filter_threshold = 128
+border_size = 20
 save-ascii = false
 save-binary = true
 save-pgm = true

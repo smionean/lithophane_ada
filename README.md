@@ -30,6 +30,7 @@ bin/lithophane [options] <input_file>
 -p --save-pgm
 -o<name> --output-name=<name>
 -H<height> --height=<height>
+-B<border> --border=<border>
 -f<filter> --filter <filter> [<n>]
 -c<file> --config=<file>
 ```
@@ -43,6 +44,7 @@ bin/lithophane [options] <input_file>
 | `-p`, `--save-pgm` | also dump the grayscale-converted image as a PGM file: `<output-name>.pgm` |
 | `-o<name>`, `--output-name=<name>` | base name used for every output file above (default: `test`) |
 | `-H<height>`, `--height=<height>` | target height of the lithophane |
+| `-B<border>`, `--border=<border>` | width, in pixels, of the border added around the image (default: `20`) |
 | `-f<filter>`, `--filter <filter> [<n>]` | image filter to apply before conversion; `<filter>` is one of `bartlett`, `gauss`, `square`, `sharpen`, `threshold`. The optional number `<n>` right after the filter name is the kernel size (an odd number, default `3`) for `bartlett`/`gauss`/`square`/`sharpen`, or the cut value `0..255` (default `128`) for `threshold`. |
 | `-c<file>`, `--config=<file>` | read options from a config file instead of (or in addition to) the command line; when given, it overrides any previous option |
 
@@ -65,6 +67,7 @@ output-name = "test"
 filter = "threshold"
 filter_size = 3
 filter_threshold = 128
+border_size = 20
 save-ascii = false
 save-binary = true
 save-pgm = true
@@ -72,21 +75,22 @@ height = 10
 ```
 
 Every key is optional; a missing key keeps its default. `filter_size` must be a
-positive odd integer and `filter_threshold` must be in `0..255`, otherwise the
-key is ignored. The config file is read at the point where `-c`/`--config`
+positive odd integer, `filter_threshold` must be in `0..255`, and `border_size`
+must be a non-negative integer, otherwise the key is ignored. The config file is read at the point where `-c`/`--config`
 appears on the command line, so options placed *after* it still take effect.
 
 > [!NOTE]
 > `-f`/`--filter` and `-c`/`--config` are wired up: the selected filter (and its
 > size / threshold) is applied to the grayscale image before the STL is
-> generated, and the config file overrides the matching settings. `-H`/`--height`
+> generated, and the config file overrides the matching settings.
+> `-B`/`--border` is wired up too: it sets the white margin added around the
+> image before conversion. `-H`/`--height`
 > is still parsed but height scaling has no effect on the generated STL for now
 > (see TODO below). When no filter is selected, a threshold filter at mid-grey
 > (`128`) is applied by default.
 
 **TODO**
 * add resize option
-* add borders option
 * add height option
 
 

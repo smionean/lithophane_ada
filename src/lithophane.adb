@@ -77,6 +77,11 @@ package body Lithophane is
             Settings.height := Natural (TOML.As_Integer (V));
          end if;
 
+         V := Field ("border_size", TOML.TOML_Integer);
+         if V.Is_Present and then TOML.As_Integer (V) >= 0 then
+            Settings.border := Natural (TOML.As_Integer (V));
+         end if;
+
          V := Field ("save-binary", TOML.TOML_Boolean);
          if V.Is_Present then
             Settings.save_as_binary := TOML.As_Boolean (V);
@@ -112,6 +117,11 @@ package body Lithophane is
            and then TOML.As_Integer (V) <= 255
          then
             Settings.filter_threshold := Color_Type (TOML.As_Integer (V));
+         end if;
+
+         V := Field ("border_size", TOML.TOML_Integer);
+         if V.Is_Present and then TOML.As_Integer (V) >= 0 then
+            Settings.border := Natural (TOML.As_Integer (V));
          end if;
 
       end;

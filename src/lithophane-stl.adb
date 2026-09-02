@@ -8,7 +8,9 @@ package body Lithophane.STL is
    Reductor : constant Float := 100.0;
 
    procedure Dump_STL_ASCII
-     (Facets_List : Facets.Vector; Settings : Settings_Record)
+     (Facets_List : Facets.Vector;
+      Settings    : Settings_Record;
+      the_color   : Color)
    is
       F : Ada.Text_IO.File_Type;
    begin
@@ -16,6 +18,8 @@ package body Lithophane.STL is
         (F,
          Out_File,
          Ada.Strings.Unbounded.To_String (Settings.outfilename)
+         & "."
+         & the_color'Img
          & ".ascii.stl");
       Put_Line (F, "solid lithophane");
       for i in Facets_List.First_Index .. Facets_List.Last_Index loop
@@ -60,7 +64,9 @@ package body Lithophane.STL is
    end Dump_STL_ASCII;
 
    procedure Dump_STL_BIN
-     (Facets_List : Facets.Vector; Settings : Settings_Record)
+     (Facets_List : Facets.Vector;
+      Settings    : Settings_Record;
+      the_color   : Color)
    is
       type TQ31 is delta 2.0 ** (-4) range -1.0 .. 1.0 - 2.0 ** (-4);
       F      : Ada.Streams.Stream_IO.File_Type;
@@ -73,7 +79,10 @@ package body Lithophane.STL is
       Create
         (F,
          Out_File,
-         Ada.Strings.Unbounded.To_String (Settings.outfilename) & ".bin.stl");
+         Ada.Strings.Unbounded.To_String (Settings.outfilename)
+         & "."
+         & the_color'Img
+         & ".bin.stl");
       S := Stream (F);
       String'Write (S, Header);
       Integer'Write (S, Integer'Val (Facets_List.Length));
@@ -127,7 +136,9 @@ package body Lithophane.STL is
    end Calculate_Normal;
 
    procedure Calculate_Facets
-     (the_matrix : Matrix_Access; Settings : Settings_Record)
+     (the_matrix : Matrix_Access;
+      Settings   : Settings_Record;
+      the_color  : Color)
    is
       Facets_List : Facets.Vector;
 
@@ -151,7 +162,7 @@ package body Lithophane.STL is
       --  it can then be merged with its flat neighbours instead of
       --  producing its own pair of triangles.
       function Is_Flat_Cell (I, J : Natural) return Boolean is
-         H : constant Color_Type := the_matrix (I, J);
+         H : constant Color_Range := the_matrix (I, J);
       begin
          return
            the_matrix (I + 1, J) = H
@@ -290,7 +301,7 @@ package body Lithophane.STL is
                if not Done (I, J) then
                   if Is_Flat_Cell (I, J) then
                      declare
-                        H      : constant Color_Type := the_matrix (I, J);
+                        H      : constant Color_Range := the_matrix (I, J);
                         Zf     : constant Float := Float (H) / Reductor;
                         W      : Natural := 1;
                         Ht     : Natural := 1;
@@ -378,11 +389,11 @@ package body Lithophane.STL is
       end loop;
 
       if Settings.save_as_ascii then
-         Dump_STL_ASCII (Facets_List, Settings);
+         Dump_STL_ASCII (Facets_List, Settings, the_color);
       end if;
 
       if Settings.save_as_binary then
-         Dump_STL_BIN (Facets_List, Settings);
+         Dump_STL_BIN (Facets_List, Settings, the_color);
       end if;
 
    end Calculate_Facets;

@@ -116,12 +116,17 @@ package body Lithophane is
            and then TOML.As_Integer (V) >= 0
            and then TOML.As_Integer (V) <= 255
          then
-            Settings.filter_threshold := Color_Type (TOML.As_Integer (V));
+            Settings.filter_threshold := Color_Range (TOML.As_Integer (V));
          end if;
 
          V := Field ("border_size", TOML.TOML_Integer);
          if V.Is_Present and then TOML.As_Integer (V) >= 0 then
             Settings.border := Natural (TOML.As_Integer (V));
+         end if;
+
+         V := Field ("generate_color", TOML.TOML_Boolean);
+         if V.Is_Present then
+            Settings.generate_color := TOML.As_Boolean (V);
          end if;
 
       end;

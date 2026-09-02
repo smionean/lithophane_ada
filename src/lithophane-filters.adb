@@ -46,15 +46,15 @@ package body Lithophane.Filters is
      (the_image  : Matrix_Type;
       pos_c      : Natural;
       pos_l      : Natural;
-      the_filter : Matrix_Filter_Type) return Color_Type
+      the_filter : Matrix_Filter_Type) return Color_Range
    is
-      dimension  : constant Integer := the_filter'Length (1);
-      milieu     : constant Integer := dimension / 2;
+      dimension : constant Integer := the_filter'Length (1);
+      milieu    : constant Integer := dimension / 2;
 
-      first_c    : constant Integer := the_image'First (1);
-      last_c     : constant Integer := the_image'Last (1);
-      first_l    : constant Integer := the_image'First (2);
-      last_l     : constant Integer := the_image'Last (2);
+      first_c : constant Integer := the_image'First (1);
+      last_c  : constant Integer := the_image'Last (1);
+      first_l : constant Integer := the_image'First (2);
+      last_l  : constant Integer := the_image'Last (2);
 
       somme      : Integer := 0;
       filter_sum : Integer := 0;
@@ -83,8 +83,7 @@ package body Lithophane.Filters is
             end if;
 
             somme :=
-              somme
-              + the_filter (i, j) * Integer (the_image (src_c, src_l));
+              somme + the_filter (i, j) * Integer (the_image (src_c, src_l));
             filter_sum := filter_sum + the_filter (i, j);
          end loop;
       end loop;
@@ -94,17 +93,16 @@ package body Lithophane.Filters is
          return the_image (pos_c, pos_l);
       end if;
 
-      result :=
-        Integer (Float'Rounding (Float (somme) / Float (filter_sum)));
+      result := Integer (Float'Rounding (Float (somme) / Float (filter_sum)));
 
       --  Clamp the result to the valid colour range.
-      if result < Integer (Color_Type'First) then
-         result := Integer (Color_Type'First);
-      elsif result > Integer (Color_Type'Last) then
-         result := Integer (Color_Type'Last);
+      if result < Integer (Color_Range'First) then
+         result := Integer (Color_Range'First);
+      elsif result > Integer (Color_Range'Last) then
+         result := Integer (Color_Range'Last);
       end if;
 
-      return Color_Type (result);
+      return Color_Range (result);
    end Apply_On_Point;
 
    procedure Apply_Filter
@@ -116,19 +114,18 @@ package body Lithophane.Filters is
    begin
       for c in the_image.all'Range (1) loop
          for l in the_image.all'Range (2) loop
-            the_image.all (c, l) :=
-              Apply_On_Point (source, c, l, the_filter);
+            the_image.all (c, l) := Apply_On_Point (source, c, l, the_filter);
          end loop;
       end loop;
    end Apply_Filter;
 
    procedure Apply_Threshold_Filter
-     (the_image : Matrix_Access; the_threshold : Color_Type) is
+     (the_image : Matrix_Access; the_threshold : Color_Range) is
    begin
       for c in 1 .. the_image.all'Last (1) loop
          for l in 1 .. the_image.all'Last (2) loop
             if the_image.all (c, l) < the_threshold then
-               the_image.all (c, l) := Color_Type'First;
+               the_image.all (c, l) := Color_Range'First;
             else
                the_image.all (c, l) := the_image.all (c, l);
             end if;

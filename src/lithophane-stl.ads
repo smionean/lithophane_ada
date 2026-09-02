@@ -1,11 +1,17 @@
 package Lithophane.STL is
 
    procedure Dump_STL_ASCII
-     (Facets_List : Facets.Vector; Settings : Settings_Record);
+     (Facets_List : Facets.Vector;
+      Settings    : Settings_Record;
+      the_color   : Color);
    procedure Dump_STL_BIN
-     (Facets_List : Facets.Vector; Settings : Settings_Record);
+     (Facets_List : Facets.Vector;
+      Settings    : Settings_Record;
+      the_color   : Color);
    procedure Calculate_Facets
-     (the_matrix : Matrix_Access; Settings : Settings_Record);
+     (the_matrix : Matrix_Access;
+      Settings   : Settings_Record;
+      the_color  : Color);
    function Calculate_Normal
      (P0 : Point; P1 : Point; P2 : Point) return Vector;
 

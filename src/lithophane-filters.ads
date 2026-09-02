@@ -23,15 +23,15 @@ package Lithophane.Filters is
      (the_image  : Matrix_Type;
       pos_c      : Natural;
       pos_l      : Natural;
-      the_filter : Matrix_Filter_Type) return Color_Type;
+      the_filter : Matrix_Filter_Type) return Color_Range;
    --  Convolve the_filter, centred on (pos_c, pos_l), with the_image and
    --  return the normalised (sum of the filter weights) result, clamped to
-   --  Color_Type. Positions outside the image are clamped to its edges.
+   --  Color_Range. Positions outside the image are clamped to its edges.
 
    procedure Apply_Filter
      (the_image : Matrix_Access; the_filter : Matrix_Filter_Type);
 
    procedure Apply_Threshold_Filter
-     (the_image : Matrix_Access; the_threshold : Color_Type);
+     (the_image : Matrix_Access; the_threshold : Color_Range);
 
 end Lithophane.Filters;

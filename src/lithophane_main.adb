@@ -166,6 +166,28 @@ procedure Lithophane_Main is
    end Process_Image;
 
    --
+   --  Process_Matrix
+   --
+   procedure Process_Matrix
+     (the_matrix : Matrix_Access;
+      Settings   : Settings_Record;
+      img_descrp : GID.Image_Descriptor;
+      the_color  : Color) is
+   begin
+      Process_Image (the_matrix, Settings);
+      Calculate_Facets (the_matrix, Settings, the_color);
+
+      if Settings.save_pgm then
+         Dump_PGM
+           (Ada.Strings.Unbounded.To_String (Settings.outfilename)
+            & "."
+            & the_color'Img,
+            img_descrp,
+            the_matrix);
+      end if;
+   end Process_Matrix;
+
+   --
    --  PreProcess_Image
    --
    procedure PreProcess_Image (Settings : Settings_Record) is
@@ -179,10 +201,10 @@ procedure Lithophane_Main is
       c     : Positive := 1;
       l     : Positive := 1;
       x     : Integer := 0;
-      rouge : Color_Type := 0;
-      bleu  : Color_Type := 0;
-      vert  : Color_Type := 0;
-      grey  : Color_Type := 0;
+      rouge : Color_Range := 0;
+      bleu  : Color_Range := 0;
+      vert  : Color_Range := 0;
+      gris  : Color_Range := 0;
    begin
       Open (F, In_File, Ada.Strings.Unbounded.To_String (Settings.filename));
       Put_Line
@@ -231,44 +253,44 @@ procedure Lithophane_Main is
          Put_Line ("IMGBUF " & img_buf'First'Img);
          for i in matr'Range (1) loop
             for j in matr'Range (2) loop
-               matr (i, j) := 255;
-               matg (i, j) := 255;
-               matb (i, j) := 255;
+               matr (i, j) := 0;
+               matg (i, j) := 0;
+               matb (i, j) := 0;
                matgrey (i, j) := 255;
             end loop;
          end loop;
 
          while x <= img_buf'Last loop
             matr (c + Settings.border, l + Settings.border) :=
-              Color_Type (img_buf (x));
-            rouge := Color_Type (img_buf (x));
+              255 - Color_Range (img_buf (x));
+            rouge := Color_Range (img_buf (x));
             --  (Standard_Error, 'r');
             x := x + 1;
             if x <= img_buf'Last then
                matg (c + Settings.border, l + Settings.border) :=
-                 Color_Type (img_buf (x));
-               vert := Color_Type (img_buf (x));
+                 255 - Color_Range (img_buf (x));
+               vert := Color_Range (img_buf (x));
                --  Put (Standard_Error, 'b');
                x := x + 1;
                if x <= img_buf'Last then
                   matb (c + Settings.border, l + Settings.border) :=
-                    Color_Type (img_buf (x));
-                  bleu := Color_Type (img_buf (x));
+                    255 - Color_Range (img_buf (x));
+                  bleu := Color_Range (img_buf (x));
                --  Put (Standard_Error, 'g');
 
                end if;
             end if;
-            grey :=
+            gris :=
               255
-              - Color_Type
+              - Color_Range
                   (0.2989 * Float (rouge) + 0.5870 * Float (vert)
                    + 0.1140 * Float (bleu));
             --  Put_Line ("GREY " & grey'Img);
-            matgrey (c + Settings.border, l + Settings.border) := grey;
+            matgrey (c + Settings.border, l + Settings.border) := gris;
 
-            img_buf (x - 2) := Unsigned_8 (grey);
-            img_buf (x - 1) := Unsigned_8 (grey);
-            img_buf (x) := Unsigned_8 (grey);
+            img_buf (x - 2) := Unsigned_8 (gris);
+            img_buf (x - 1) := Unsigned_8 (gris);
+            img_buf (x) := Unsigned_8 (gris);
             x := x + 1;
             if c mod GID.Pixel_Width (img_descrp) = 0 then
                c := 1; --  Put(Standard_Error," c=1");
@@ -280,15 +302,23 @@ procedure Lithophane_Main is
 
          end loop;
 
-         Process_Image (matgrey, Settings);
-         Calculate_Facets (matgrey, Settings);
+         Process_Matrix (matgrey, Settings, img_descrp, Grey);
 
-         if Settings.save_pgm then
-            Dump_PGM
-              (Ada.Strings.Unbounded.To_String (Settings.outfilename),
-               img_descrp,
-               matgrey);
+         if Settings.generate_color then
+            Process_Matrix (matr, Settings, img_descrp, Red);
+            Process_Matrix (matg, Settings, img_descrp, Green);
+            Process_Matrix (matb, Settings, img_descrp, Blue);
          end if;
+
+         --  Process_Image (matgrey, Settings);
+         --  Calculate_Facets (matgrey, Settings);
+
+         --  if Settings.save_pgm then
+         --     Dump_PGM
+         --       (Ada.Strings.Unbounded.To_String (Settings.outfilename),
+         --        img_descrp,
+         --        matgrey);
+         --  end if;
 
       end;
 
@@ -314,10 +344,10 @@ procedure Lithophane_Main is
          return;
       elsif (for all C of Extra => C in '0' .. '9') then
          if Settings.filter = Lithophane.threshold
-           and then Color_Type'Value (Extra) >= 0
-           and then Color_Type'Value (Extra) <= 255
+           and then Color_Range'Value (Extra) >= 0
+           and then Color_Range'Value (Extra) <= 255
          then
-            Settings.filter_threshold := Color_Type'Value (Extra);
+            Settings.filter_threshold := Color_Range'Value (Extra);
             Put_Line ("Filter threshold =" & Settings.filter_threshold'Img);
          elsif Natural'Value (Extra) >= 3
            and then Natural'Value (Extra) mod 2 = 1
@@ -341,7 +371,7 @@ begin
       case Getopt
              ("h -help v -version f: -filter= b -save-binary a -save-ascii"
               & " p -save-pgm o: -output-name= H: --height= B: -border="
-              & " c: -config=")
+              & " c: -config= C -color")
       is
          when 'h'    =>
             Put_Line ("Get help");
@@ -388,6 +418,20 @@ begin
                & Ada.Strings.Unbounded.To_String (Settings.config));
             Parse_Config (Settings);
 
+         when 'C'    =>
+            Put_Line ("Color");
+            Settings.generate_color := True;
+
+         when '?'    =>
+            Put_Line ("Seen -?");
+            Help;
+            return;
+
+         when ':'    =>
+            Put_Line ("Seen -:");
+            Help;
+            return;
+
          when '-'    =>
             if Full_Switch = "-help" then
                Put_Line ("Seen --help");
@@ -416,6 +460,8 @@ begin
                  Ada.Strings.Unbounded.To_Unbounded_String (Parameter);
             elsif Full_Switch = "-save-pgm" then
                Settings.save_pgm := True;
+            elsif Full_Switch = "-color" then
+               Settings.generate_color := True;
             elsif Full_Switch = "-config" then
                Settings.config :=
                  Ada.Strings.Unbounded.To_Unbounded_String (Parameter);

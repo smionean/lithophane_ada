@@ -18,6 +18,8 @@ with GID;
 with Ada.Calendar;
 with Ada.Characters.Handling; use Ada.Characters.Handling;
 with Ada.Command_Line;        use Ada.Command_Line;
+with Ada.Exceptions;          use Ada.Exceptions;
+with Ada.IO_Exceptions;
 with Ada.Streams.Stream_IO;   use Ada.Streams.Stream_IO;
 with Ada.Text_IO;             use Ada.Text_IO;
 with Ada.Unchecked_Deallocation;
@@ -69,6 +71,30 @@ procedure Lithophane_Main is
          "-c<a_config_file> --config=<a_config_file> ; note:  it overwrites"
          & " previous options");
    end Help;
+
+   --  Raised once a fatal, user-facing problem has been reported (the
+   --  human-readable diagnostic is printed by Fail before the exception is
+   --  propagated). The top-level handler turns it into a non-zero exit
+   --  status without dumping a raw exception trace on the user.
+   Fatal_Error : exception;
+
+   procedure Fail (Message : String) is
+   begin
+      Put_Line (Standard_Error, "Error: " & Message);
+      raise Fatal_Error;
+   end Fail;
+
+   --  Close F if it is still open, swallowing any secondary error so the
+   --  original problem is the one that reaches the user.
+   procedure Close_If_Open (F : in out Ada.Streams.Stream_IO.File_Type) is
+   begin
+      if Is_Open (F) then
+         Close (F);
+      end if;
+   exception
+      when others =>
+         null;
+   end Close_If_Open;
 
    use Interfaces;
 
@@ -146,6 +172,16 @@ procedure Lithophane_Main is
       Put_Line (F, "255");
       Print_Matrix (the_image, F);
       Close (F);
+   exception
+      when E : others =>
+         if Ada.Text_IO.Is_Open (F) then
+            Ada.Text_IO.Close (F);
+         end if;
+         Fail
+           ("cannot write PGM file """
+            & name
+            & ".pgm"": "
+            & Exception_Message (E));
    end Dump_PGM;
 
    --
@@ -329,6 +365,64 @@ procedure Lithophane_Main is
 
       --  printBuffer(i);
       Close (F);
+
+   exception
+      when Fatal_Error =>
+         --  Already reported (e.g. by Dump_PGM); just release the file.
+         Close_If_Open (F);
+         raise;
+
+      when Ada.IO_Exceptions.Name_Error =>
+         Close_If_Open (F);
+         Fail
+           ("cannot open input image file """
+            & Ada.Strings.Unbounded.To_String (Settings.filename)
+            & """ (no such file)");
+
+      when Ada.IO_Exceptions.Use_Error | Ada.IO_Exceptions.Status_Error =>
+         Close_If_Open (F);
+         Fail
+           ("cannot read input image file """
+            & Ada.Strings.Unbounded.To_String (Settings.filename)
+            & """ (permission denied or file in use)");
+
+      when GID.unknown_image_format =>
+         Close_If_Open (F);
+         Fail
+           ("""" & Ada.Strings.Unbounded.To_String (Settings.filename)
+            & """ is not in an image format GID recognises");
+
+      when GID.known_but_unsupported_image_format
+         | GID.unsupported_image_subformat =>
+         Close_If_Open (F);
+         Fail
+           ("the image format of """
+            & Ada.Strings.Unbounded.To_String (Settings.filename)
+            & """ is recognised but not supported");
+
+      when GID.error_in_image_data =>
+         Close_If_Open (F);
+         Fail
+           ("the image file """
+            & Ada.Strings.Unbounded.To_String (Settings.filename)
+            & """ is corrupt or truncated");
+
+      when Storage_Error =>
+         Close_If_Open (F);
+         Fail
+           ("not enough memory to process """
+            & Ada.Strings.Unbounded.To_String (Settings.filename)
+            & """ (image too large?)");
+
+      when E : others =>
+         Close_If_Open (F);
+         Fail
+           ("failed to generate the lithophane for """
+            & Ada.Strings.Unbounded.To_String (Settings.filename)
+            & """: "
+            & Exception_Name (E)
+            & " - "
+            & Exception_Message (E));
    end Generate_Lithophane;
 
    Settings : Settings_Record;
@@ -338,6 +432,34 @@ procedure Lithophane_Main is
    --  filter parameter: filter_threshold for the threshold filter, filter_size
    --  for every other filter. Example: lithophane --filter gauss 5 image.png
    Filter_Given : Boolean := False;
+
+   --  Decode a --filter/-f value into Settings.filter. An unknown name would
+   --  otherwise leak a bare Constraint_Error out of Filters_Choice'Value.
+   procedure Set_Filter (Name : String) is
+   begin
+      Settings.filter := Lithophane.Filters_Choice'Value (Name);
+      Filter_Given := True;
+   exception
+      when Constraint_Error =>
+         Fail
+           ("unknown filter """
+            & Name
+            & """; expected one of bartlett, gauss, square, sharpen,"
+            & " threshold");
+   end Set_Filter;
+
+   --  Decode a --border/-B value into Settings.border, rejecting anything
+   --  that is not a plain non-negative integer.
+   procedure Set_Border (Spec : String) is
+   begin
+      Settings.border := Natural'Value (Spec);
+   exception
+      when Constraint_Error =>
+         Fail
+           ("invalid border value """
+            & Spec
+            & """; expected a non-negative integer");
+   end Set_Border;
 
    --  Read the numeric argument that follows a --filter switch, if any, and
    --  store it in the relevant Settings field. When the next argument is not a
@@ -364,6 +486,13 @@ procedure Lithophane_Main is
          Settings.filename :=
            Ada.Strings.Unbounded.To_Unbounded_String (Extra);
       end if;
+   exception
+      when Constraint_Error =>
+         --  Extra is all digits but does not fit the target type; treat it
+         --  as "no valid parameter given" and keep the defaults.
+         Put_Line
+           (Standard_Error,
+            "ignoring out-of-range filter argument: " & Extra);
    end Get_Filter_Argument;
 
    --  Parse a "--dimensions=WxHxD" value into Settings.dimensions (in mm,
@@ -442,8 +571,7 @@ begin
 
          when 'f'    =>
             Put_Line ("Seen -f with arg=" & Parameter);
-            Settings.filter := Lithophane.Filters_Choice'Value (Parameter);
-            Filter_Given := True;
+            Set_Filter (Parameter);
 
          when 'b'    =>
             Put_Line ("Save stl-bin");
@@ -466,7 +594,7 @@ begin
 
          when 'B'    =>
             Put_Line ("Border");
-            Settings.border := Natural'Value (Parameter);
+            Set_Border (Parameter);
 
          when 'c'    =>
             Settings.config :=
@@ -485,8 +613,7 @@ begin
                Version;
             elsif Full_Switch = "-filter" then
                Put_Line ("Seen --filter with arg=" & Parameter);
-               Settings.filter := Lithophane.Filters_Choice'Value (Parameter);
-               Filter_Given := True;
+               Set_Filter (Parameter);
             elsif Full_Switch = "-save-binary" then
                Put_Line ("Seen --save-binary");
                Settings.save_as_binary := True;
@@ -497,7 +624,7 @@ begin
                Put_Line ("Seen --save-3mf");
                Settings.save_as_3mf := True;
             elsif Full_Switch = "-border" then
-               Settings.border := Natural'Value (Parameter);
+               Set_Border (Parameter);
                Put_Line ("Seen --border with arg=" & Settings.border'Img);
             elsif Full_Switch = "-output-name" then
                Settings.outfilename :=
@@ -525,16 +652,46 @@ begin
         Ada.Strings.Unbounded.To_Unbounded_String (Get_Argument);
    end if;
 
+   if Ada.Strings.Unbounded.Length (Settings.filename) = 0 then
+      New_Line (Standard_Error);
+      Put_Line (Standard_Error, "Error: no input image file given.");
+      New_Line (Standard_Error);
+      Help;
+      Set_Exit_Status (Failure);
+      return;
+   end if;
+
    Generate_Lithophane (Settings);
 
 exception
-   when GNAT.Command_Line.Invalid_Switch =>
-      New_Line;
-      Put_Line (Standard_Error, "-- invalid command line switch --");
-      New_Line;
-      Help;
-      return;
+   when Fatal_Error =>
+      --  A human-readable diagnostic has already been printed by Fail.
+      Set_Exit_Status (Failure);
 
-   when others =>
-      Put_Line (Standard_Error, "Exception ");
+   when GNAT.Command_Line.Invalid_Switch =>
+      New_Line (Standard_Error);
+      Put_Line
+        (Standard_Error,
+         "Error: invalid command line switch: " & Full_Switch);
+      New_Line (Standard_Error);
+      Help;
+      Set_Exit_Status (Failure);
+
+   when GNAT.Command_Line.Invalid_Parameter =>
+      New_Line (Standard_Error);
+      Put_Line
+        (Standard_Error,
+         "Error: missing parameter for switch: " & Full_Switch);
+      New_Line (Standard_Error);
+      Help;
+      Set_Exit_Status (Failure);
+
+   when E : others =>
+      Put_Line
+        (Standard_Error,
+         "Unexpected error: "
+         & Exception_Name (E)
+         & " - "
+         & Exception_Message (E));
+      Set_Exit_Status (Failure);
 end Lithophane_Main;

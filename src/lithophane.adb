@@ -91,11 +91,6 @@ package body Lithophane is
             Settings.outfilename := TOML.As_Unbounded_String (V);
          end if;
 
-         V := Field ("height", TOML.TOML_Integer);
-         if V.Is_Present and then TOML.As_Integer (V) >= 0 then
-            Settings.height := Natural (TOML.As_Integer (V));
-         end if;
-
          V := Field ("border_size", TOML.TOML_Integer);
          if V.Is_Present and then TOML.As_Integer (V) >= 0 then
             Settings.border := Natural (TOML.As_Integer (V));

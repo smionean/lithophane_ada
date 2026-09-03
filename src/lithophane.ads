@@ -41,7 +41,6 @@ package Lithophane is
    end record;
 
    type Settings_Record is record
-      height           : Natural := 0;
       border           : Natural := 20;
       filter           : Filters_Choice := threshold;
       filter_size      : Natural := 3;

@@ -8,5 +8,4 @@ save-ascii = false
 save-binary = true
 save-3mf = false
 save-pgm = true
-height = 10
 dimensions = {height=100.0, width=100.0, depth=1.5}

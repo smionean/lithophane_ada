@@ -93,15 +93,8 @@ appears on the command line, so options placed *after* it still take effect.
 > size / threshold) is applied to the grayscale image before the STL is
 > generated, and the config file overrides the matching settings.
 > `-B`/`--border` is wired up too: it sets the white margin added around the
-> image before conversion. `-H`/`--height`
-> is still parsed but height scaling has no effect on the generated STL for now
-> (see TODO below). When no filter is selected, a threshold filter at mid-grey
+> image before conversion. When no filter is selected, a threshold filter at mid-grey
 > (`128`) is applied by default.
-
-**TODO**
-* add resize option
-* add height option
-
 
 Based on [GID](https://gen-img-dec.sourceforge.io)
 

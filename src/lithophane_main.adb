@@ -33,7 +33,7 @@ with Lithophane.Filters; use Lithophane.Filters;
 
 procedure Lithophane_Main is
 
-   Lithophane_Version : constant String := "0.1.2";
+   Lithophane_Version : constant String := "1.0.0";
 
    procedure Version is
    begin
@@ -58,7 +58,6 @@ procedure Lithophane_Main is
       Put_Line (Standard_Error, "-m --save-3mf");
       Put_Line (Standard_Error, "-p --save-pgm");
       Put_Line (Standard_Error, "-o<a_filename> --output-name=<a_filename>");
-      Put_Line (Standard_Error, "-H<a_height> --height=<a_height>");
       Put_Line (Standard_Error, "-B<a_border> --border=<a_border>");
       Put_Line
         (Standard_Error,
@@ -429,7 +428,7 @@ begin
    loop
       case Getopt
              ("h -help v -version f: -filter= b -save-binary a -save-ascii"
-              & " m -save-3mf p -save-pgm o: -output-name= H: --height="
+              & " m -save-3mf p -save-pgm o: -output-name="
               & " B: -border= c: -config= -dimensions=")
       is
          when 'h'    =>
@@ -465,10 +464,6 @@ begin
             Settings.outfilename :=
               Ada.Strings.Unbounded.To_Unbounded_String (Parameter);
 
-         when 'H'    =>
-            Put_Line ("Height");
-            Settings.height := Natural'Value (Parameter);
-
          when 'B'    =>
             Put_Line ("Border");
             Settings.border := Natural'Value (Parameter);
@@ -501,9 +496,6 @@ begin
             elsif Full_Switch = "-save-3mf" then
                Put_Line ("Seen --save-3mf");
                Settings.save_as_3mf := True;
-            elsif Full_Switch = "-height" then
-               Settings.height := Natural'Value (Parameter);
-               Put_Line ("Seen --height with arg=" & Settings.height'Img);
             elsif Full_Switch = "-border" then
                Settings.border := Natural'Value (Parameter);
                Put_Line ("Seen --border with arg=" & Settings.border'Img);

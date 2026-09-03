@@ -1,3 +1,19 @@
+------------------------------------------------------------------------------
+--  lithophane_main.adb
+--
+--  Program entry point. Drives the whole pipeline:
+--    * parse the command line (GNAT.Command_Line) and print help/version;
+--    * load the input image with GID into a raw 24-bit RGB bitmap;
+--    * convert it to a greyscale colour matrix (optionally saved as PGM);
+--    * pick and apply the requested filter (bartlett, gauss, square,
+--      sharpen, threshold), optionally overridden by a TOML config;
+--    * build the mesh via Lithophane.Calculate_Facets and write it out as
+--      binary STL, ASCII STL and/or 3MF.
+--
+--  Created : 2026-08-23
+--  Author  : Simon Beàn
+------------------------------------------------------------------------------
+
 with GID;
 with Ada.Calendar;
 with Ada.Characters.Handling; use Ada.Characters.Handling;
@@ -12,6 +28,7 @@ with Interfaces;
 
 with Lithophane;         use Lithophane;
 with Lithophane.STL;     use Lithophane.STL;
+with Lithophane.File3mf; use Lithophane.File3mf;
 with Lithophane.Filters; use Lithophane.Filters;
 
 procedure Lithophane_Main is
@@ -38,10 +55,16 @@ procedure Lithophane_Main is
          & " Example: lithophane --filter gauss 5 image.png");
       Put_Line (Standard_Error, "-b --save-binary");
       Put_Line (Standard_Error, "-a --save-ascii");
+      Put_Line (Standard_Error, "-m --save-3mf");
       Put_Line (Standard_Error, "-p --save-pgm");
       Put_Line (Standard_Error, "-o<a_filename> --output-name=<a_filename>");
       Put_Line (Standard_Error, "-H<a_height> --height=<a_height>");
       Put_Line (Standard_Error, "-B<a_border> --border=<a_border>");
+      Put_Line
+        (Standard_Error,
+         "--dimensions=<W>x<H>x<D> ; target 3MF size in mm; an empty or 0"
+         & " component leaves that axis proportional."
+         & " Example: --dimensions=100x100x1.5");
       Put_Line
         (Standard_Error,
          "-c<a_config_file> --config=<a_config_file> ; note:  it overwrites"
@@ -166,9 +189,9 @@ procedure Lithophane_Main is
    end Process_Image;
 
    --
-   --  PreProcess_Image
+   --  Generate_Lithophane
    --
-   procedure PreProcess_Image (Settings : Settings_Record) is
+   procedure Generate_Lithophane (Settings : Settings_Record) is
 
       F          : Ada.Streams.Stream_IO.File_Type;
       img_descrp : GID.Image_Descriptor;
@@ -176,13 +199,14 @@ procedure Lithophane_Main is
         To_Upper (Ada.Strings.Unbounded.To_String (Settings.filename));
       next_frame : Ada.Calendar.Day_Duration := 0.0;
 
-      c     : Positive := 1;
-      l     : Positive := 1;
-      x     : Integer := 0;
-      rouge : Color_Type := 0;
-      bleu  : Color_Type := 0;
-      vert  : Color_Type := 0;
-      grey  : Color_Type := 0;
+      c           : Positive := 1;
+      l           : Positive := 1;
+      x           : Integer := 0;
+      rouge       : Color_Type := 0;
+      bleu        : Color_Type := 0;
+      vert        : Color_Type := 0;
+      grey        : Color_Type := 0;
+      Facets_List : Facets.Vector;
    begin
       Open (F, In_File, Ada.Strings.Unbounded.To_String (Settings.filename));
       Put_Line
@@ -281,7 +305,19 @@ procedure Lithophane_Main is
          end loop;
 
          Process_Image (matgrey, Settings);
-         Calculate_Facets (matgrey, Settings);
+         Facets_List := Calculate_Facets (matgrey);
+
+         if Settings.save_as_ascii then
+            Dump_STL_ASCII (Facets_List, Settings);
+         end if;
+
+         if Settings.save_as_binary then
+            Dump_STL_BIN (Facets_List, Settings);
+         end if;
+
+         if Settings.save_as_3mf then
+            Dump_3mf (Facets_List, Settings);
+         end if;
 
          if Settings.save_pgm then
             Dump_PGM
@@ -294,7 +330,7 @@ procedure Lithophane_Main is
 
       --  printBuffer(i);
       Close (F);
-   end PreProcess_Image;
+   end Generate_Lithophane;
 
    Settings : Settings_Record;
 
@@ -331,6 +367,59 @@ procedure Lithophane_Main is
       end if;
    end Get_Filter_Argument;
 
+   --  Parse a "--dimensions=WxHxD" value into Settings.dimensions (in mm,
+   --  applied only to the 3MF output). Any component may be left empty or
+   --  set to 0 to leave that axis unconstrained, e.g. "--dimensions=100x100x"
+   --  fixes width and height and lets the depth follow proportionally.
+   procedure Parse_Dimensions (Spec : String) is
+      Start : Positive := Spec'First;
+      Axis  : Natural := 0;
+
+      procedure Take (S : String) is
+         Val : Float := 0.0;
+      begin
+         if S /= "" then
+            begin
+               Val := Float'Value (S);
+            exception
+               when others =>
+                  Put_Line (Standard_Error, "ignoring bad dimension: " & S);
+                  Val := 0.0;
+            end;
+         end if;
+         case Axis is
+            when 0      =>
+               Settings.dimensions.width := Val;
+
+            when 1      =>
+               Settings.dimensions.height := Val;
+
+            when 2      =>
+               Settings.dimensions.depth := Val;
+
+            when others =>
+               null;
+         end case;
+         Axis := Axis + 1;
+      end Take;
+   begin
+      for I in Spec'Range loop
+         if Spec (I) in 'x' | 'X' then
+            Take (Spec (Start .. I - 1));
+            Start := I + 1;
+         end if;
+      end loop;
+      Take (Spec (Start .. Spec'Last));
+      Put_Line
+        (Standard_Error,
+         "Dimensions (mm): "
+         & Settings.dimensions.width'Img
+         & " x"
+         & Settings.dimensions.height'Img
+         & " x"
+         & Settings.dimensions.depth'Img);
+   end Parse_Dimensions;
+
 begin
    if Argument_Count < 1 then
       Help;
@@ -340,8 +429,8 @@ begin
    loop
       case Getopt
              ("h -help v -version f: -filter= b -save-binary a -save-ascii"
-              & " p -save-pgm o: -output-name= H: --height= B: -border="
-              & " c: -config=")
+              & " m -save-3mf p -save-pgm o: -output-name= H: --height="
+              & " B: -border= c: -config= -dimensions=")
       is
          when 'h'    =>
             Put_Line ("Get help");
@@ -364,6 +453,10 @@ begin
          when 'a'    =>
             Put_Line ("Save stl-acii");
             Settings.save_as_ascii := True;
+
+         when 'm'    =>
+            Put_Line ("Save 3mf");
+            Settings.save_as_3mf := True;
 
          when 'p'    =>
             Settings.save_pgm := True;
@@ -405,6 +498,9 @@ begin
             elsif Full_Switch = "-save-ascii" then
                Put_Line ("Seen --save-ascii");
                Settings.save_as_ascii := True;
+            elsif Full_Switch = "-save-3mf" then
+               Put_Line ("Seen --save-3mf");
+               Settings.save_as_3mf := True;
             elsif Full_Switch = "-height" then
                Settings.height := Natural'Value (Parameter);
                Put_Line ("Seen --height with arg=" & Settings.height'Img);
@@ -420,6 +516,8 @@ begin
                Settings.config :=
                  Ada.Strings.Unbounded.To_Unbounded_String (Parameter);
                Parse_Config (Settings);
+            elsif Full_Switch = "-dimensions" then
+               Parse_Dimensions (Parameter);
             end if;
 
          when others =>
@@ -435,6 +533,16 @@ begin
         Ada.Strings.Unbounded.To_Unbounded_String (Get_Argument);
    end if;
 
-   PreProcess_Image (Settings);
+   Generate_Lithophane (Settings);
 
+exception
+   when GNAT.Command_Line.Invalid_Switch =>
+      New_Line;
+      Put_Line (Standard_Error, "-- invalid command line switch --");
+      New_Line;
+      Help;
+      return;
+
+   when others =>
+      Put_Line (Standard_Error, "Exception ");
 end Lithophane_Main;

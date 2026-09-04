@@ -24,9 +24,11 @@ with Ada.Strings.Unbounded;
 package Lithophane is
    pragma Elaborate_Body;
 
-   type Filters_Choice is (bartlett, gauss, square, sharpen, threshold);
+   type Filters_Choice is (bartlett, gauss, square, sharpen, none);
 
-   type Color_Type is new Integer range 0 .. 255;
+   type Bytes is mod 2 ** 8;
+
+   type Color_Type is new Bytes range 0 .. 255;
    type Grey_Type is new Float range 0.0 .. 1.0;
 
    --  Target physical size of the model, in millimetres, applied when a 3MF
@@ -42,7 +44,7 @@ package Lithophane is
 
    type Settings_Record is record
       border           : Natural := 20;
-      filter           : Filters_Choice := threshold;
+      filter           : Filters_Choice := none;
       filter_size      : Natural := 3;
       filter_threshold : Color_Type := 128;
       save_as_binary   : Boolean := True;
@@ -50,6 +52,8 @@ package Lithophane is
       save_as_3mf      : Boolean := False;
       save_pgm         : Boolean := False;
       dimensions       : Dimensions_Type := (others => 0.0);
+      max_size         : Natural :=
+        0;   --  maximum image dimension (0 = no limit)
       filename         : Ada.Strings.Unbounded.Unbounded_String;
       outfilename      : Ada.Strings.Unbounded.Unbounded_String :=
         Ada.Strings.Unbounded.To_Unbounded_String ("test");

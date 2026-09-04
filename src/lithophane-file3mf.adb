@@ -10,8 +10,14 @@
 --    * assembly of the OPC/ZIP archive with the "stored" (uncompressed)
 --      method, CRC-32 computed directly, then writing the .3mf file.
 --
+--  The model part is never materialised as one big string: it is emitted as
+--  a stream of small chunks, once to size and checksum it and once to write
+--  it into the archive. Only the welded vertex coordinates and the triangle
+--  index triples are held in memory, not the (far larger) XML text.
+--
 --  Created : 2026-09-02
---  Author  : Simon Beàn & Claude Code
+--  Author  : Simon Beàn
+--  Helper  : Claude Code
 ------------------------------------------------------------------------------
 
 with Ada.Streams.Stream_IO; use Ada.Streams.Stream_IO;
@@ -21,6 +27,7 @@ with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Ada.Characters.Latin_1;
 with Ada.Containers;        use Ada.Containers;
 with Ada.Containers.Hashed_Maps;
+with Ada.Containers.Vectors;
 with Interfaces;            use Interfaces;
 
 package body Lithophane.File3mf is
@@ -68,11 +75,27 @@ package body Lithophane.File3mf is
         Hash            => Key_Hash,
         Equivalent_Keys => "=");
 
+   --  Welded vertices, in the order their id was assigned, and the triangle
+   --  index triples that survive welding. Together these are a fraction of
+   --  the size of the model XML they generate, so they can stay resident
+   --  while the XML is streamed out twice.
+   package Point_Vectors is new
+     Ada.Containers.Vectors (Index_Type => Positive, Element_Type => Point);
+
+   type Tri_Indices is record
+      A, B, C : Natural;
+   end record;
+
+   package Tri_Vectors is new
+     Ada.Containers.Vectors
+       (Index_Type   => Positive,
+        Element_Type => Tri_Indices);
+
    --  ---------------------------------------------------------------------
-   --  CRC-32 (ISO 3309 / ZIP), computed directly, no lookup table.
+   --  CRC-32 (ISO 3309 / ZIP), computed directly, no lookup table. The
+   --  streamed model part feeds its chunks through CRC32_Update.
    --  ---------------------------------------------------------------------
-   function CRC32 (S : String) return Unsigned_32 is
-      C : Unsigned_32 := 16#FFFF_FFFF#;
+   procedure CRC32_Update (C : in out Unsigned_32; S : String) is
    begin
       for Ch of S loop
          C := C xor Unsigned_32 (Character'Pos (Ch));
@@ -84,6 +107,12 @@ package body Lithophane.File3mf is
             end if;
          end loop;
       end loop;
+   end CRC32_Update;
+
+   function CRC32 (S : String) return Unsigned_32 is
+      C : Unsigned_32 := 16#FFFF_FFFF#;
+   begin
+      CRC32_Update (C, S);
       return C xor 16#FFFF_FFFF#;
    end CRC32;
 
@@ -125,7 +154,7 @@ package body Lithophane.File3mf is
 
       Model_Path : constant String := "3D/3dmodel.model";
 
-      --  Filled in by Build_Model, used only for the progress line.
+      --  Filled in by Weld_Mesh, used only for the progress line.
       Welded_Vertices     : Natural := 0;
       Welded_Triangles    : Natural := 0;
       Out_W, Out_H, Out_D : Float := 0.0;   --  final bounding box, in mm
@@ -135,48 +164,50 @@ package body Lithophane.File3mf is
          return Trim (X'Image, Both);
       end Num;
 
-      --  Build the mesh XML from the facet list. Coincident corners are
-      --  welded onto a single shared vertex index (see Vertex_Maps above),
-      --  and triangles that collapse to a line or a point once welded are
-      --  dropped, so the slicer sees a closed manifold instead of a
-      --  triangle soup with open edges.
-      function Build_Model return String is
-         V_Buf   : Unbounded_String;   --  <vertices> body
-         T_Buf   : Unbounded_String;   --  <triangles> body
+      --  Welded geometry (output/millimetre space). Built once by Weld_Mesh,
+      --  then read (not modified) by Emit_Model on every streaming pass.
+      Verts : Point_Vectors.Vector;
+      Tris  : Tri_Vectors.Vector;
+
+      D : Dimensions_Type renames Settings.dimensions;
+
+      --  Model-space bounding box (pixel units on X/Y, relief units on Z).
+      Min_X, Min_Y, Min_Z : Float := Float'Last;
+      Max_X, Max_Y, Max_Z : Float := Float'First;
+
+      Sx, Sy, Sz : Float := 1.0;   --  per-axis scale, model -> mm
+
+      procedure Grow (P : Point) is
+      begin
+         Min_X := Float'Min (Min_X, P.px);
+         Max_X := Float'Max (Max_X, P.px);
+         Min_Y := Float'Min (Min_Y, P.py);
+         Max_Y := Float'Max (Max_Y, P.py);
+         Min_Z := Float'Min (Min_Z, P.pz);
+         Max_Z := Float'Max (Max_Z, P.pz);
+      end Grow;
+
+      --  A vertex transformed to output (millimetre) space: the box is
+      --  moved to the origin, scaled per axis, and X/Y are re-centred so
+      --  the model sits symmetrically about (0, 0) like a printer plate.
+      function To_MM (P : Point) return Point is
+         Ext_X : constant Float := Float'Max (Max_X - Min_X, 1.0e-6);
+         Ext_Y : constant Float := Float'Max (Max_Y - Min_Y, 1.0e-6);
+      begin
+         return
+           (px => (P.px - Min_X) * Sx - Ext_X * Sx / 2.0,
+            py => (P.py - Min_Y) * Sy - Ext_Y * Sy / 2.0,
+            pz => (P.pz - Min_Z) * Sz);
+      end To_MM;
+
+      --  Turn the facet soup into welded vertices + triangle index triples.
+      --  Runs three linear passes: bounding box, per-axis scale, then weld.
+      --  Coincident corners (quantised to Weld_Grid) collapse onto one id;
+      --  triangles that degenerate to a line or point once welded are
+      --  dropped, so the slicer sees a closed manifold.
+      procedure Weld_Mesh is
          Map     : Vertex_Maps.Map;
          Next_Id : Natural := 0;
-         Tri_Cnt : Natural := 0;
-
-         D : Dimensions_Type renames Settings.dimensions;
-
-         --  Model-space bounding box (pixel units on X/Y, relief units on Z).
-         Min_X, Min_Y, Min_Z : Float := Float'Last;
-         Max_X, Max_Y, Max_Z : Float := Float'First;
-
-         procedure Grow (P : Point) is
-         begin
-            Min_X := Float'Min (Min_X, P.px);
-            Max_X := Float'Max (Max_X, P.px);
-            Min_Y := Float'Min (Min_Y, P.py);
-            Max_Y := Float'Max (Max_Y, P.py);
-            Min_Z := Float'Min (Min_Z, P.pz);
-            Max_Z := Float'Max (Max_Z, P.pz);
-         end Grow;
-
-         Sx, Sy, Sz : Float := 1.0;   --  per-axis scale, model -> mm
-
-         --  A vertex transformed to output (millimetre) space: the box is
-         --  moved to the origin, scaled per axis, and X/Y are re-centred so
-         --  the model sits symmetrically about (0, 0) like a printer plate.
-         function To_MM (P : Point) return Point is
-            Ext_X : constant Float := Float'Max (Max_X - Min_X, 1.0e-6);
-            Ext_Y : constant Float := Float'Max (Max_Y - Min_Y, 1.0e-6);
-         begin
-            return
-              (px => (P.px - Min_X) * Sx - Ext_X * Sx / 2.0,
-               py => (P.py - Min_Y) * Sy - Ext_Y * Sy / 2.0,
-               pz => (P.pz - Min_Z) * Sz);
-         end To_MM;
 
          function Vertex_Index (P : Point) return Natural is
             K : constant Vertex_Key := To_Key (P);
@@ -190,17 +221,8 @@ package body Lithophane.File3mf is
                Id : constant Natural := Next_Id;
             begin
                Map.Insert (K, Id);
+               Verts.Append (P);
                Next_Id := Next_Id + 1;
-               Append
-                 (V_Buf,
-                  "     <vertex x="""
-                  & Num (P.px)
-                  & """ y="""
-                  & Num (P.py)
-                  & """ z="""
-                  & Num (P.pz)
-                  & """/>"
-                  & LF);
                return Id;
             end;
          end Vertex_Index;
@@ -217,10 +239,10 @@ package body Lithophane.File3mf is
             end;
          end loop;
 
-         --  Derive the per-axis scale. An axis with a requested size uses
-         --  it directly; an unconstrained axis (0.0) borrows the scale of
-         --  the first constrained one, so proportions are preserved. With
-         --  no dimensions requested at all every scale stays 1.0.
+         --  Pass 2: derive the per-axis scale. An axis with a requested
+         --  size uses it directly; an unconstrained axis (0.0) borrows the
+         --  scale of the first constrained one, so proportions are
+         --  preserved. With no dimensions requested every scale stays 1.0.
          declare
             Ext_X : constant Float := Float'Max (Max_X - Min_X, 1.0e-6);
             Ext_Y : constant Float := Float'Max (Max_Y - Min_Y, 1.0e-6);
@@ -242,7 +264,7 @@ package body Lithophane.File3mf is
             Out_D := Ext_Z * Sz;
          end;
 
-         --  Pass 2: emit welded, scaled geometry.
+         --  Pass 3: weld and record the surviving triangles.
          for I in Facets_List.First_Index .. Facets_List.Last_Index loop
             declare
                F  : constant Facet := Facets_List.Element (I);
@@ -251,62 +273,76 @@ package body Lithophane.File3mf is
                Cc : constant Natural := Vertex_Index (To_MM (F.Vertex_C));
             begin
                if A /= B and then B /= Cc and then A /= Cc then
-                  Append
-                    (T_Buf,
-                     "     <triangle v1="""
-                     & Trim (Natural'Image (A), Both)
-                     & """ v2="""
-                     & Trim (Natural'Image (B), Both)
-                     & """ v3="""
-                     & Trim (Natural'Image (Cc), Both)
-                     & """/>"
-                     & LF);
-                  Tri_Cnt := Tri_Cnt + 1;
+                  Tris.Append (Tri_Indices'(A, B, Cc));
                end if;
             end;
          end loop;
 
          Welded_Vertices := Next_Id;
-         Welded_Triangles := Tri_Cnt;
+         Welded_Triangles := Natural (Tris.Length);
+         --  Map is no longer needed; its storage is released on return.
+      end Weld_Mesh;
 
-         return
-           "<?xml version=""1.0"" encoding=""UTF-8""?>"
-           & LF
-           & "<model unit=""millimeter"" xml:lang=""en-US"""
-           & " xmlns=""http://schemas.microsoft.com/3dmanufacturing/"
-           & "core/2015/02"">"
-           & LF
-           & " <resources>"
-           & LF
-           & "  <object id=""1"" type=""model"">"
-           & LF
-           & "   <mesh>"
-           & LF
-           & "    <vertices>"
-           & LF
-           & To_String (V_Buf)
-           & "    </vertices>"
-           & LF
-           & "    <triangles>"
-           & LF
-           & To_String (T_Buf)
-           & "    </triangles>"
-           & LF
-           & "   </mesh>"
-           & LF
-           & "  </object>"
-           & LF
-           & " </resources>"
-           & LF
-           & " <build>"
-           & LF
-           & "  <item objectid=""1""/>"
-           & LF
-           & " </build>"
-           & LF
-           & "</model>"
-           & LF;
-      end Build_Model;
+      --  Emit the whole 3D/3dmodel.model XML as a sequence of small chunks
+      --  passed to Sink. Called twice: once with a counting/checksumming
+      --  sink to fill in the ZIP header, once with a sink that writes to
+      --  the archive stream. It only reads Verts and Tris, never mutates.
+      procedure Emit_Model (Sink : access procedure (Chunk : String)) is
+      begin
+         Sink ("<?xml version=""1.0"" encoding=""UTF-8""?>" & LF);
+         Sink
+           ("<model unit=""millimeter"" xml:lang=""en-US"""
+            & " xmlns=""http://schemas.microsoft.com/3dmanufacturing/"
+            & "core/2015/02"">"
+            & LF);
+         Sink (" <resources>" & LF);
+         Sink ("  <object id=""1"" type=""model"">" & LF);
+         Sink ("   <mesh>" & LF);
+
+         Sink ("    <vertices>" & LF);
+         for I in Verts.First_Index .. Verts.Last_Index loop
+            declare
+               P : constant Point := Verts.Element (I);
+            begin
+               Sink
+                 ("     <vertex x="""
+                  & Num (P.px)
+                  & """ y="""
+                  & Num (P.py)
+                  & """ z="""
+                  & Num (P.pz)
+                  & """/>"
+                  & LF);
+            end;
+         end loop;
+         Sink ("    </vertices>" & LF);
+
+         Sink ("    <triangles>" & LF);
+         for I in Tris.First_Index .. Tris.Last_Index loop
+            declare
+               T : constant Tri_Indices := Tris.Element (I);
+            begin
+               Sink
+                 ("     <triangle v1="""
+                  & Trim (Natural'Image (T.A), Both)
+                  & """ v2="""
+                  & Trim (Natural'Image (T.B), Both)
+                  & """ v3="""
+                  & Trim (Natural'Image (T.C), Both)
+                  & """/>"
+                  & LF);
+            end;
+         end loop;
+         Sink ("    </triangles>" & LF);
+
+         Sink ("   </mesh>" & LF);
+         Sink ("  </object>" & LF);
+         Sink (" </resources>" & LF);
+         Sink (" <build>" & LF);
+         Sink ("  <item objectid=""1""/>" & LF);
+         Sink (" </build>" & LF);
+         Sink ("</model>" & LF);
+      end Emit_Model;
 
       Content_Types : constant String :=
         "<?xml version=""1.0"" encoding=""UTF-8""?>"
@@ -339,10 +375,12 @@ package body Lithophane.File3mf is
         & LF;
 
       type Part is record
-         Name   : Unbounded_String;
-         Body_T : Unbounded_String;
-         CRC    : Unsigned_32;
-         Offset : Unsigned_32;
+         Name     : Unbounded_String;
+         Body_T   : Unbounded_String;   --  empty for the streamed model part
+         Streamed : Boolean := False;   --  body produced by Emit_Model
+         CRC      : Unsigned_32 := 0;
+         Size     : Unsigned_32 := 0;   --  uncompressed = compressed (stored)
+         Offset   : Unsigned_32 := 0;
       end record;
 
       Parts : array (1 .. 3) of Part;
@@ -350,9 +388,13 @@ package body Lithophane.File3mf is
       F : Ada.Streams.Stream_IO.File_Type;
       S : Stream_Access;
 
+      procedure Write_To_Archive (Str : String) is
+      begin
+         Put_Str (S, Str);
+      end Write_To_Archive;
+
       procedure Put_Local_Header (P : Part) is
          Name : constant String := To_String (P.Name);
-         Data : constant String := To_String (P.Body_T);
       begin
          Put_U32 (S, 16#0403_4B50#);          --  local file header signature
          Put_U16 (S, 20);                     --  version needed to extract
@@ -361,17 +403,20 @@ package body Lithophane.File3mf is
          Put_U16 (S, DOS_Time);
          Put_U16 (S, DOS_Date);
          Put_U32 (S, P.CRC);
-         Put_U32 (S, Unsigned_32 (Data'Length));  --  compressed size
-         Put_U32 (S, Unsigned_32 (Data'Length));  --  uncompressed size
+         Put_U32 (S, P.Size);                 --  compressed size
+         Put_U32 (S, P.Size);                 --  uncompressed size
          Put_U16 (S, Unsigned_16 (Name'Length));
          Put_U16 (S, 0);                       --  extra field length
          Put_Str (S, Name);
-         Put_Str (S, Data);
+         if P.Streamed then
+            Emit_Model (Write_To_Archive'Access);
+         else
+            Put_Str (S, To_String (P.Body_T));
+         end if;
       end Put_Local_Header;
 
       procedure Put_Central_Header (P : Part) is
          Name : constant String := To_String (P.Name);
-         Data : constant String := To_String (P.Body_T);
       begin
          Put_U32 (S, 16#0201_4B50#);          --  central directory signature
          Put_U16 (S, 20);                     --  version made by
@@ -381,8 +426,8 @@ package body Lithophane.File3mf is
          Put_U16 (S, DOS_Time);
          Put_U16 (S, DOS_Date);
          Put_U32 (S, P.CRC);
-         Put_U32 (S, Unsigned_32 (Data'Length));  --  compressed size
-         Put_U32 (S, Unsigned_32 (Data'Length));  --  uncompressed size
+         Put_U32 (S, P.Size);                 --  compressed size
+         Put_U32 (S, P.Size);                 --  uncompressed size
          Put_U16 (S, Unsigned_16 (Name'Length));
          Put_U16 (S, 0);                      --  extra field length
          Put_U16 (S, 0);                      --  file comment length
@@ -393,19 +438,61 @@ package body Lithophane.File3mf is
          Put_Str (S, Name);
       end Put_Central_Header;
 
+      --  Sizing/checksumming sink for the streamed model part. The length
+      --  is 64-bit: the XML for a very dense mesh easily passes 2 GB (which
+      --  used to overflow a 32-bit Natural before the 4 GB ceiling below
+      --  was even reached).
+      Model_Len : Unsigned_64 := 0;
+      Model_CRC : Unsigned_32 := 16#FFFF_FFFF#;
+
+      procedure Measure_Model (Str : String) is
+      begin
+         Model_Len := Model_Len + Unsigned_64 (Str'Length);
+         CRC32_Update (Model_CRC, Str);
+      end Measure_Model;
+
+      --  A plain (non-ZIP64) OPC/ZIP package addresses every part with
+      --  32-bit sizes and offsets, so the model part must stay below 4 GB.
+      --  A mesh whose XML is larger than that has far more triangles than
+      --  a 3D printer can resolve anyway; refuse it with a clear hint
+      --  rather than writing a corrupt archive or raising a raw overflow.
+      Zip32_Limit : constant Unsigned_64 :=
+        Unsigned_64 (Unsigned_32'Last) - 16#1_0000#;   --  room for headers
+
       CD_Start : Unsigned_32;
       CD_End   : Unsigned_32;
 
    begin
+      Weld_Mesh;
+
+      --  Size and checksum the model part without materialising it.
+      Emit_Model (Measure_Model'Access);
+      Model_CRC := Model_CRC xor 16#FFFF_FFFF#;
+
+      if Model_Len > Zip32_Limit then
+         raise Constraint_Error
+           with
+             "3MF model would be "
+             & Trim (Unsigned_64'Image (Model_Len), Both)
+             & " bytes ("
+             & Trim (Natural'Image (Welded_Triangles), Both)
+             & " triangles), over the 4 GB limit of a plain-ZIP 3MF."
+             & " Reduce the image resolution (e.g. `sips -Z 1500 image.jpg`)"
+             & " or lower --border.";
+      end if;
+
       Parts (1).Name := To_Unbounded_String ("[Content_Types].xml");
       Parts (1).Body_T := To_Unbounded_String (Content_Types);
       Parts (2).Name := To_Unbounded_String ("_rels/.rels");
       Parts (2).Body_T := To_Unbounded_String (Rels);
       Parts (3).Name := To_Unbounded_String (Model_Path);
-      Parts (3).Body_T := To_Unbounded_String (Build_Model);
+      Parts (3).Streamed := True;
+      Parts (3).CRC := Model_CRC;
+      Parts (3).Size := Unsigned_32 (Model_Len);
 
-      for P of Parts loop
-         P.CRC := CRC32 (To_String (P.Body_T));
+      for I in 1 .. 2 loop
+         Parts (I).CRC := CRC32 (To_String (Parts (I).Body_T));
+         Parts (I).Size := Unsigned_32 (Length (Parts (I).Body_T));
       end loop;
 
       Create

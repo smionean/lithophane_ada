@@ -28,20 +28,27 @@ with GNAT.Command_Line;       use GNAT.Command_Line;
 
 with Interfaces;
 
-with Lithophane;         use Lithophane;
-with Lithophane.STL;     use Lithophane.STL;
-with Lithophane.File3mf; use Lithophane.File3mf;
-with Lithophane.Filters; use Lithophane.Filters;
+with Lithophane;                 use Lithophane;
+with Lithophane.STL;             use Lithophane.STL;
+with Lithophane.File3mf;         use Lithophane.File3mf;
+with Lithophane.Filters;         use Lithophane.Filters;
+with Lithophane.Image_Utilities; use Lithophane.Image_Utilities;
 
 procedure Lithophane_Main is
 
    Lithophane_Version : constant String := "1.0.0";
 
+   --
+   --  Version
+   --
    procedure Version is
    begin
       Put_Line (Standard_Error, "Lithophane " & Lithophane_Version);
    end Version;
 
+   --
+   --  Help
+   --
    procedure Help is
    begin
       Version;
@@ -63,6 +70,14 @@ procedure Lithophane_Main is
       Put_Line (Standard_Error, "-B<a_border> --border=<a_border>");
       Put_Line
         (Standard_Error,
+         "-t<threshold> --threshold=<threshold> ; threshold value 0 .. 255"
+         & " for the threshold filter");
+      Put_Line
+        (Standard_Error,
+         "-M<max_size> --max_size=<max_size> ; maximum image dimension in"
+         & " pixels (0 = no limit); larger images are resized down");
+      Put_Line
+        (Standard_Error,
          "--dimensions=<W>x<H>x<D> ; target 3MF size in mm; an empty or 0"
          & " component leaves that axis proportional."
          & " Example: --dimensions=100x100x1.5");
@@ -78,14 +93,23 @@ procedure Lithophane_Main is
    --  status without dumping a raw exception trace on the user.
    Fatal_Error : exception;
 
+   --
+   --  Fail
+   --   @param Message the human-readable error message to print
+   --
    procedure Fail (Message : String) is
    begin
       Put_Line (Standard_Error, "Error: " & Message);
       raise Fatal_Error;
    end Fail;
 
+   --
+   --  Close_If_Open
+   --   @param F the file to close if it is still open
+   --
    --  Close F if it is still open, swallowing any secondary error so the
    --  original problem is the one that reaches the user.
+   --
    procedure Close_If_Open (F : in out Ada.Streams.Stream_IO.File_Type) is
    begin
       if Is_Open (F) then
@@ -106,7 +130,18 @@ procedure Lithophane_Main is
 
    img_buf : p_Byte_Array := null;
 
+   --
+   --  Load_Raw_Image
+   --   @param image the GID descriptor of the source image
+   --   @param buffer the raw 24-bit RGB bitmap to fill
+   --   @param next_frame the time until the next frame (for animated GIFs)
+   --
    --  Load image into a 24-bit truecolor RGB raw bitmap (for a PPM output)
+   --  or into a greyscale matrix (for the lithophane mesh). The bitmap is
+   --  allocated here and must be freed by the caller.
+   --  The bitmap is a linear array of bytes, three per pixel, in row-major
+   --  order, with the first pixel at the top-left corner of the image.
+   --
    procedure Load_Raw_Image
      (image      : in out GID.Image_Descriptor;
       buffer     : in out p_Byte_Array;
@@ -186,6 +221,8 @@ procedure Lithophane_Main is
 
    --
    --  Process_Image
+   --   @param the_image the greyscale image to filter
+   --   @param Settings the settings for the lithophane generation
    --
    procedure Process_Image
      (the_image : Matrix_Access; Settings : Settings_Record) is
@@ -193,40 +230,78 @@ procedure Lithophane_Main is
 
       --  apply a filter
       case Settings.filter is
-         when bartlett  =>
+         when bartlett =>
             Apply_Filter
               (the_image,
                Create_Bartlett_Filter
                  (Settings.filter_size, Settings.filter_size));
 
-         when gauss     =>
+         when gauss    =>
             Apply_Filter
               (the_image,
                Create_Gauss_Filter
                  (Settings.filter_size, Settings.filter_size));
 
-         when square    =>
+         when square   =>
             Apply_Filter
               (the_image,
                Create_Square_Filter
                  (Settings.filter_size, Settings.filter_size));
 
-         when sharpen   =>
+         when sharpen  =>
             Apply_Filter
               (the_image,
                Create_Sharpen_Filter
                  (Settings.filter_size, Settings.filter_size));
 
-         when threshold =>
-            Apply_Threshold_Filter (the_image, Settings.filter_threshold);
+         when none     =>
+            null;
+
       end case;
 
    end Process_Image;
 
    --
    --  Generate_Lithophane
+   --   @param the_image the greyscale image to convert into a lithophane
+   --   @param img_descrp the GID descriptor of the source image
+   --   @param Settings the settings for the lithophane generation
    --
-   procedure Generate_Lithophane (Settings : Settings_Record) is
+   procedure Generate_Lithophane
+     (the_image  : Matrix_Access;
+      img_descrp : GID.Image_Descriptor;
+      Settings   : Settings_Record)
+   is
+      Facets_List : Facets.Vector;
+   begin
+      Process_Image (the_image, Settings);
+      Facets_List := Calculate_Facets (the_image);
+
+      if Settings.save_as_ascii then
+         Dump_STL_ASCII (Facets_List, Settings);
+      end if;
+
+      if Settings.save_as_binary then
+         Dump_STL_BIN (Facets_List, Settings);
+      end if;
+
+      if Settings.save_as_3mf then
+         Dump_3mf (Facets_List, Settings);
+      end if;
+
+      if Settings.save_pgm then
+         Dump_PGM
+           (Ada.Strings.Unbounded.To_String (Settings.outfilename),
+            img_descrp,
+            the_image);
+      end if;
+   end Generate_Lithophane;
+
+   --
+   --  Prepare_Lithophane
+   --   @param Settings the settings for the lithophane generation
+   --
+   procedure Prepare_Lithophane (Settings : Settings_Record) is
 
       F          : Ada.Streams.Stream_IO.File_Type;
       img_descrp : GID.Image_Descriptor;
@@ -234,14 +309,13 @@ procedure Lithophane_Main is
         To_Upper (Ada.Strings.Unbounded.To_String (Settings.filename));
       next_frame : Ada.Calendar.Day_Duration := 0.0;
 
-      c           : Positive := 1;
-      l           : Positive := 1;
-      x           : Integer := 0;
-      rouge       : Color_Type := 0;
-      bleu        : Color_Type := 0;
-      vert        : Color_Type := 0;
-      grey        : Color_Type := 0;
-      Facets_List : Facets.Vector;
+      c     : Positive := 1;
+      l     : Positive := 1;
+      x     : Integer := 0;
+      rouge : Color_Type := 0;
+      bleu  : Color_Type := 0;
+      vert  : Color_Type := 0;
+      grey  : Color_Type := 0;
    begin
       Open (F, In_File, Ada.Strings.Unbounded.To_String (Settings.filename));
       Put_Line
@@ -269,49 +343,32 @@ procedure Lithophane_Main is
       Put_Line (Standard_Error, "  F " & Integer'Image (img_buf'First));
       Put_Line (Standard_Error, "  L " & Integer'Image (img_buf'Last));
       declare
-         matr       : constant Matrix_Access :=
+         --  Only the greyscale height map is ever read afterwards. The raw
+         --  R/G/B planes used to be materialised as three extra full-size
+         --  Color_Type matrices; they were written but never used, so for a
+         --  large photo they wasted ~3x the height map's memory (which, with
+         --  the facet list, is what pushed the 3MF path into Storage_Error).
+         matgrey : constant Matrix_Access :=
            new Matrix_Type
                  (1 .. GID.Pixel_Width (img_descrp) + 2 * Settings.border,
                   1 .. GID.Pixel_Height (img_descrp) + 2 * Settings.border);
-         matg       : constant Matrix_Access :=
-           new Matrix_Type
-                 (1 .. GID.Pixel_Width (img_descrp) + 2 * Settings.border,
-                  1 .. GID.Pixel_Height (img_descrp) + 2 * Settings.border);
-         matb       : constant Matrix_Access :=
-           new Matrix_Type
-                 (1 .. GID.Pixel_Width (img_descrp) + 2 * Settings.border,
-                  1 .. GID.Pixel_Height (img_descrp) + 2 * Settings.border);
-         matgrey    : constant Matrix_Access :=
-           new Matrix_Type
-                 (1 .. GID.Pixel_Width (img_descrp) + 2 * Settings.border,
-                  1 .. GID.Pixel_Height (img_descrp) + 2 * Settings.border);
-         tempString : String (1 .. 3);
       begin
          Put_Line ("IMGBUF " & img_buf'First'Img);
-         for i in matr'Range (1) loop
-            for j in matr'Range (2) loop
-               matr (i, j) := 255;
-               matg (i, j) := 255;
-               matb (i, j) := 255;
+         for i in matgrey'Range (1) loop
+            for j in matgrey'Range (2) loop
                matgrey (i, j) := 255;
             end loop;
          end loop;
 
          while x <= img_buf'Last loop
-            matr (c + Settings.border, l + Settings.border) :=
-              Color_Type (img_buf (x));
             rouge := Color_Type (img_buf (x));
             --  (Standard_Error, 'r');
             x := x + 1;
             if x <= img_buf'Last then
-               matg (c + Settings.border, l + Settings.border) :=
-                 Color_Type (img_buf (x));
                vert := Color_Type (img_buf (x));
                --  Put (Standard_Error, 'b');
                x := x + 1;
                if x <= img_buf'Last then
-                  matb (c + Settings.border, l + Settings.border) :=
-                    Color_Type (img_buf (x));
                   bleu := Color_Type (img_buf (x));
                --  Put (Standard_Error, 'g');
 
@@ -324,10 +381,6 @@ procedure Lithophane_Main is
                    + 0.1140 * Float (bleu));
             --  Put_Line ("GREY " & grey'Img);
             matgrey (c + Settings.border, l + Settings.border) := grey;
-
-            img_buf (x - 2) := Unsigned_8 (grey);
-            img_buf (x - 1) := Unsigned_8 (grey);
-            img_buf (x) := Unsigned_8 (grey);
             x := x + 1;
             if c mod GID.Pixel_Width (img_descrp) = 0 then
                c := 1; --  Put(Standard_Error," c=1");
@@ -339,28 +392,36 @@ procedure Lithophane_Main is
 
          end loop;
 
-         Process_Image (matgrey, Settings);
-         Facets_List := Calculate_Facets (matgrey);
+         --  The raw bitmap has been folded into matgrey; release it before
+         --  the (much larger) facet list is built.
+         Dispose (img_buf);
 
-         if Settings.save_as_ascii then
-            Dump_STL_ASCII (Facets_List, Settings);
+         Apply_Threshold_Filter (matgrey, Settings.filter_threshold);
+
+         if Settings.max_size /= 0
+           and then
+             (matgrey'Length (1) > Settings.max_size
+              or else matgrey'Length (2) > Settings.max_size)
+         then
+            Put_Line
+              (Standard_Error,
+               "Image is large; this may take a while to process..."
+               & matgrey'Length (1)'Img);
+            declare
+               new_width  : constant Natural :=
+                 Calculate_New_Image_Size
+                   (matgrey'Length (1), matgrey'Length (2), tWIDTH, Settings);
+               new_height : constant Natural :=
+                 Calculate_New_Image_Size
+                   (matgrey'Length (1), matgrey'Length (2), tHEIGHT, Settings);
+               resized    : constant Matrix_Access :=
+                 Resize_Image (matgrey, new_width, new_height);
+            begin
+               Generate_Lithophane (resized, img_descrp, Settings);
+            end;
+         else
+            Generate_Lithophane (matgrey, img_descrp, Settings);
          end if;
-
-         if Settings.save_as_binary then
-            Dump_STL_BIN (Facets_List, Settings);
-         end if;
-
-         if Settings.save_as_3mf then
-            Dump_3mf (Facets_List, Settings);
-         end if;
-
-         if Settings.save_pgm then
-            Dump_PGM
-              (Ada.Strings.Unbounded.To_String (Settings.outfilename),
-               img_descrp,
-               matgrey);
-         end if;
-
       end;
 
       --  printBuffer(i);
@@ -389,11 +450,14 @@ procedure Lithophane_Main is
       when GID.unknown_image_format =>
          Close_If_Open (F);
          Fail
-           ("""" & Ada.Strings.Unbounded.To_String (Settings.filename)
+           (""""
+            & Ada.Strings.Unbounded.To_String (Settings.filename)
             & """ is not in an image format GID recognises");
 
-      when GID.known_but_unsupported_image_format
-         | GID.unsupported_image_subformat =>
+      when
+        GID.known_but_unsupported_image_format
+        | GID.unsupported_image_subformat
+      =>
          Close_If_Open (F);
          Fail
            ("the image format of """
@@ -423,7 +487,7 @@ procedure Lithophane_Main is
             & Exception_Name (E)
             & " - "
             & Exception_Message (E));
-   end Generate_Lithophane;
+   end Prepare_Lithophane;
 
    Settings : Settings_Record;
 
@@ -461,6 +525,32 @@ procedure Lithophane_Main is
             & """; expected a non-negative integer");
    end Set_Border;
 
+   --  Decode a --threshold/-t value into Settings.filter_threshold, rejecting
+   --  anything that is not a plain integer in the 0 .. 255 range.
+   procedure Set_Threshold (Spec : String) is
+   begin
+      Settings.filter_threshold := Color_Type'Value (Spec);
+   exception
+      when Constraint_Error =>
+         Fail
+           ("invalid threshold value """
+            & Spec
+            & """; expected an integer between 0 and 255");
+   end Set_Threshold;
+
+   --  Decode a --max_size/-M value into Settings.max_size, rejecting anything
+   --  that is not a plain non-negative integer (0 = no limit).
+   procedure Set_Max_Size (Spec : String) is
+   begin
+      Settings.max_size := Natural'Value (Spec);
+   exception
+      when Constraint_Error =>
+         Fail
+           ("invalid max_size value """
+            & Spec
+            & """; expected a non-negative integer");
+   end Set_Max_Size;
+
    --  Read the numeric argument that follows a --filter switch, if any, and
    --  store it in the relevant Settings field. When the next argument is not a
    --  plain number it is the input file name instead, so keep it for later.
@@ -470,14 +560,7 @@ procedure Lithophane_Main is
       if Extra = "" then
          return;
       elsif (for all C of Extra => C in '0' .. '9') then
-         if Settings.filter = Lithophane.threshold
-           and then Color_Type'Value (Extra) >= 0
-           and then Color_Type'Value (Extra) <= 255
-         then
-            Settings.filter_threshold := Color_Type'Value (Extra);
-            Put_Line ("Filter threshold =" & Settings.filter_threshold'Img);
-         elsif Natural'Value (Extra) >= 3
-           and then Natural'Value (Extra) mod 2 = 1
+         if Natural'Value (Extra) >= 3 and then Natural'Value (Extra) mod 2 = 1
          then
             Settings.filter_size := Natural'Value (Extra);
             Put_Line ("Filter size =" & Settings.filter_size'Img);
@@ -491,8 +574,7 @@ procedure Lithophane_Main is
          --  Extra is all digits but does not fit the target type; treat it
          --  as "no valid parameter given" and keep the defaults.
          Put_Line
-           (Standard_Error,
-            "ignoring out-of-range filter argument: " & Extra);
+           (Standard_Error, "ignoring out-of-range filter argument: " & Extra);
    end Get_Filter_Argument;
 
    --  Parse a "--dimensions=WxHxD" value into Settings.dimensions (in mm,
@@ -558,7 +640,8 @@ begin
       case Getopt
              ("h -help v -version f: -filter= b -save-binary a -save-ascii"
               & " m -save-3mf p -save-pgm o: -output-name="
-              & " B: -border= c: -config= -dimensions=")
+              & " B: -border= t: -threshold= M: -max_size="
+              & " c: -config= -dimensions=")
       is
          when 'h'    =>
             Put_Line ("Get help");
@@ -596,6 +679,14 @@ begin
             Put_Line ("Border");
             Set_Border (Parameter);
 
+         when 't'    =>
+            Put_Line ("Seen -t with arg=" & Parameter);
+            Set_Threshold (Parameter);
+
+         when 'M'    =>
+            Put_Line ("Seen -M with arg=" & Parameter);
+            Set_Max_Size (Parameter);
+
          when 'c'    =>
             Settings.config :=
               Ada.Strings.Unbounded.To_Unbounded_String (Parameter);
@@ -626,6 +717,14 @@ begin
             elsif Full_Switch = "-border" then
                Set_Border (Parameter);
                Put_Line ("Seen --border with arg=" & Settings.border'Img);
+            elsif Full_Switch = "-threshold" then
+               Set_Threshold (Parameter);
+               Put_Line
+                 ("Seen --threshold with arg="
+                  & Settings.filter_threshold'Img);
+            elsif Full_Switch = "-max_size" then
+               Set_Max_Size (Parameter);
+               Put_Line ("Seen --max_size with arg=" & Settings.max_size'Img);
             elsif Full_Switch = "-output-name" then
                Settings.outfilename :=
                  Ada.Strings.Unbounded.To_Unbounded_String (Parameter);
@@ -661,7 +760,7 @@ begin
       return;
    end if;
 
-   Generate_Lithophane (Settings);
+   Prepare_Lithophane (Settings);
 
 exception
    when Fatal_Error =>
@@ -671,8 +770,7 @@ exception
    when GNAT.Command_Line.Invalid_Switch =>
       New_Line (Standard_Error);
       Put_Line
-        (Standard_Error,
-         "Error: invalid command line switch: " & Full_Switch);
+        (Standard_Error, "Error: invalid command line switch: " & Full_Switch);
       New_Line (Standard_Error);
       Help;
       Set_Exit_Status (Failure);

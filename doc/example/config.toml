@@ -1,6 +1,6 @@
 input-name = "foo.png"
 output-name = "test"
-filter = "threshold"
+filter = "none"
 filter_size = 3
 filter_threshold = 128
 border_size = 20
@@ -9,3 +9,4 @@ save-binary = true
 save-3mf = false
 save-pgm = true
 dimensions = {height=100.0, width=100.0, depth=1.5}
+max_size = 1500

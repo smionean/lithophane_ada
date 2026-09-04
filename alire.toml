@@ -3,6 +3,11 @@ description = "Create lithophane with Ada"
 long-description = """
 Create [lithophane](https://en.wikipedia.org/wiki/Lithophane) of your favourite picture with Ada.
 
+**Build**
+```
+alr build
+```
+
 **Usage**
 ```
 bin/lithophane [options] <input_file>
@@ -83,9 +88,7 @@ appears on the command line, so options placed *after* it still take effect.
 > size / threshold) is applied to the grayscale image before the STL is
 > generated, and the config file overrides the matching settings.
 > `-B`/`--border` is wired up too: it sets the white margin added around the
-> image before conversion. `-H`/`--height`
-> is still parsed but height scaling has no effect on the generated STL for now
-> (see TODO below). When no filter is selected, a threshold filter at mid-grey
+> image before conversion. When no filter is selected, a threshold filter at mid-grey
 > (`128`) is applied by default.
 """
 version = "1.0.0"
@@ -95,7 +98,7 @@ maintainers = ["Simon Beàn <smionean@gmail.com>"]
 maintainers-logins = ["smionean"]
 licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
 website = "https://github.com/smionean/lithophane_ada"
-tags = ["3dprint", "lithophane", "lithography"]
+tags = ["3dprint", "lithophane", "lithography", "stl", "3mf"]
 
 executables = ["lithophane"]
 

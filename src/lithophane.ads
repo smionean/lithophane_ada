@@ -53,7 +53,7 @@ package Lithophane is
       save_pgm         : Boolean := False;
       dimensions       : Dimensions_Type := (others => 0.0);
       max_size         : Natural :=
-        0;   --  maximum image dimension (0 = no limit)
+        1_500;   --  maximum image dimension (0 = no limit)
       filename         : Ada.Strings.Unbounded.Unbounded_String;
       outfilename      : Ada.Strings.Unbounded.Unbounded_String :=
         Ada.Strings.Unbounded.To_Unbounded_String ("test");

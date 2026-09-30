@@ -5,11 +5,13 @@
 --  shared vocabulary used across the whole program:
 --    * scalar types: Color_Type (0 .. 255), Grey_Type (0.0 .. 1.0);
 --    * Dimensions_Type, the optional target physical size in millimetres;
---    * Settings_Record, holding every run option (filter, border, output
---      formats, file names, config path, dimensions);
+--    * Settings_Record, holding every run option (filter, filter size and
+--      threshold, border, relief height, output formats, maximum image
+--      size, file names, config path, dimensions);
 --    * geometry types Vector / Point / Facet and the Facets vector;
---    * image containers (Matrix_Type, Matrix_Grey_Type and their accesses)
---      and Matrix_Filter_Type for convolution kernels.
+--    * the height map container Matrix_Grey_Type (normalised greys,
+--      0.0 .. 1.0) and its access type, and Matrix_Filter_Type for
+--      convolution kernels.
 --  It also declares Parse_Config (TOML overrides), Calculate_Facets
 --  (height map -> triangle mesh), Calculate_Normal and Print_Matrix.
 --
@@ -44,9 +46,12 @@ package Lithophane is
 
    type Settings_Record is record
       border           : Natural := 20;
+      height           : Float := 10.0;
+      --  maximum relief height in mm: the highest point of the relief lies
+      --  at Z = height (the brightest grey is scaled to it)
       filter           : Filters_Choice := none;
       filter_size      : Natural := 3;
-      filter_threshold : Color_Type := 128;
+      filter_threshold : Grey_Type := 0.5;
       save_as_binary   : Boolean := True;
       save_as_ascii    : Boolean := False;
       save_as_3mf      : Boolean := False;
@@ -82,13 +87,9 @@ package Lithophane is
    package Facets is new
      Ada.Containers.Vectors (Index_Type => Positive, Element_Type => Facet);
 
-   type Matrix_Type is
-     array (Natural range <>, Natural range <>) of Color_Type;
-
    type Matrix_Grey_Type is
      array (Natural range <>, Natural range <>) of Grey_Type;
 
-   type Matrix_Access is access Matrix_Type;
    type Matrix_Grey_Access is access Matrix_Grey_Type;
 
    type Matrix_Filter_Type is
@@ -96,7 +97,7 @@ package Lithophane is
    --  Filter weights may be negative (e.g. the sharpen kernel).
 
    procedure Print_Matrix
-     (the_matrix : Matrix_Access;
+     (the_matrix : Matrix_Grey_Access;
       F          : Ada.Text_IO.File_Type := Standard_Output);
 
    procedure Parse_Config (Settings : in out Settings_Record);
@@ -104,7 +105,11 @@ package Lithophane is
    --  fields of Settings with the values it contains. On error, a diagnostic
    --  is printed on Standard_Error and Settings is left unchanged.
 
-   function Calculate_Facets (the_matrix : Matrix_Access) return Facets.Vector;
+   function Calculate_Facets
+     (the_matrix : Matrix_Grey_Access; Settings : Settings_Record)
+      return Facets.Vector;
+   --  Build the lithophane mesh from the_matrix; grey values are scaled so
+   --  that the highest point of the relief lies at Z = Settings.height.
 
    function Calculate_Normal
      (P0 : Point; P1 : Point; P2 : Point) return Vector;

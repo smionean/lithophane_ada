@@ -5,7 +5,7 @@
 --    * Calculate_New_Image_Size scales both sides by
 --      Settings.max_size / max(width, height), floors each, keeps a
 --      minimum of 1, and returns the requested dimension.
---    * Resize_Image allocates a new Matrix_Type of the target size and
+--    * Resize_Image allocates a new Matrix_Grey_Type of the target size and
 --      fills it by nearest-neighbour sampling, flooring the mapped source
 --      index so it never steps past the last column/row.
 --
@@ -43,13 +43,14 @@ package body Lithophane.Image_Utilities is
    end Calculate_New_Image_Size;
 
    function Resize_Image
-     (the_image : Matrix_Access; new_width : Natural; new_height : Natural)
-      return Matrix_Access
+     (the_image  : Matrix_Grey_Access;
+      new_width  : Natural;
+      new_height : Natural) return Matrix_Grey_Access
    is
       old_width  : constant Natural := the_image'Length (1);
       old_height : constant Natural := the_image'Length (2);
-      new_image  : constant Matrix_Access :=
-        new Matrix_Type (1 .. new_width, 1 .. new_height);
+      new_image  : constant Matrix_Grey_Access :=
+        new Matrix_Grey_Type (1 .. new_width, 1 .. new_height);
       x_ratio    : constant Float := Float (old_width) / Float (new_width);
       y_ratio    : constant Float := Float (old_height) / Float (new_height);
    begin

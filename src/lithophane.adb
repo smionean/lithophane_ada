@@ -3,10 +3,14 @@
 --
 --  Root package body. Contains:
 --    * Parse_Config -- load the TOML file named by Settings.config and
---      override the matching Settings fields, reporting errors on stderr;
---    * Print_Matrix -- dump a colour matrix as text;
+--      override the matching Settings fields (filter_threshold is a float
+--      in 0.0 .. 1.0, height a positive number, max_size a non-negative
+--      integer), reporting errors on stderr;
+--    * Print_Matrix -- dump a greyscale matrix as text;
 --    * Calculate_Facets -- turn the filtered height map into a watertight
---      triangle mesh (relief surface, base and side walls);
+--      triangle mesh (relief surface, base and side walls). Grey values
+--      are scaled so the highest point lies at Z = Settings.height (mm),
+--      and the flat base lies at Z = -2.0;
 --    * Calculate_Normal -- unit normal of a triangle from its three points.
 --
 --  Created : 2026-08-23
@@ -19,12 +23,11 @@ with Ada.Numerics.Elementary_Functions; use Ada.Numerics.Elementary_Functions;
 
 package body Lithophane is
 
-   Width    : constant Float := -1.0;
-   Reductor : constant Float := 100.0;
+   Z : constant Float := -2.0;
 
    procedure Print_Matrix
-     (the_matrix : Matrix_Access; F : Ada.Text_IO.File_Type := Standard_Output)
-   is
+     (the_matrix : Matrix_Grey_Access;
+      F          : Ada.Text_IO.File_Type := Standard_Output) is
    begin
       for i in the_matrix.all'Range (1) loop
          for j in the_matrix.all'Range (2) loop
@@ -38,6 +41,7 @@ package body Lithophane is
       use Ada.Strings.Unbounded;
       use type TOML.Any_Value_Kind;
       use type TOML.Any_Integer;
+      use type TOML.Valid_Float;
 
       Config_Name : constant String := To_String (Settings.config);
       Result      : constant TOML.Read_Result :=
@@ -130,17 +134,32 @@ package body Lithophane is
             Settings.filter_size := Natural (TOML.As_Integer (V));
          end if;
 
-         V := Field ("filter_threshold", TOML.TOML_Integer);
+         V := Field ("filter_threshold", TOML.TOML_Float);
          if V.Is_Present
-           and then TOML.As_Integer (V) >= 0
-           and then TOML.As_Integer (V) <= 255
+           and then TOML.As_Float (V).Value >= 0.0
+           and then TOML.As_Float (V).Value <= 1.0
          then
-            Settings.filter_threshold := Color_Type (TOML.As_Integer (V));
+            Settings.filter_threshold := Grey_Type (TOML.As_Float (V).Value);
          end if;
 
          V := Field ("border_size", TOML.TOML_Integer);
          if V.Is_Present and then TOML.As_Integer (V) >= 0 then
             Settings.border := Natural (TOML.As_Integer (V));
+         end if;
+
+         V := Field ("max_size", TOML.TOML_Integer);
+         if V.Is_Present and then TOML.As_Integer (V) >= 0 then
+            Settings.max_size := Natural (TOML.As_Integer (V));
+         end if;
+
+         --  height accepts a float or an integer and must be positive.
+         V := Field ("height", TOML.TOML_Float);
+         if V.Is_Present and then TOML.As_Float (V).Value > 0.0 then
+            Settings.height := Float (TOML.As_Float (V).Value);
+         end if;
+         V := Field ("height", TOML.TOML_Integer);
+         if V.Is_Present and then TOML.As_Integer (V) > 0 then
+            Settings.height := Float (TOML.As_Integer (V));
          end if;
 
          --  dimensions = { width = <mm>, height = <mm>, depth = <mm> }
@@ -203,7 +222,9 @@ package body Lithophane is
       return V;
    end Calculate_Normal;
 
-   function Calculate_Facets (the_matrix : Matrix_Access) return Facets.Vector
+   function Calculate_Facets
+     (the_matrix : Matrix_Grey_Access; Settings : Settings_Record)
+      return Facets.Vector
    is
       Facets_List : Facets.Vector;
 
@@ -223,11 +244,16 @@ package body Lithophane is
 
       A_Facet : Facet;
 
+      --  Relief scale: the brightest grey of the_matrix is raised to exactly
+      --  Settings.height, so Settings.height is the Z of the highest point.
+      --  An all-black matrix stays flat at Z = 0.0.
+      Scale : Float := 0.0;
+
       --  A cell is flat when its four corners sit at the same height:
       --  it can then be merged with its flat neighbours instead of
       --  producing its own pair of triangles.
       function Is_Flat_Cell (I, J : Natural) return Boolean is
-         H : constant Color_Type := the_matrix (I, J);
+         H : constant Grey_Type := the_matrix (I, J);
       begin
          return
            the_matrix (I + 1, J) = H
@@ -332,12 +358,25 @@ package body Lithophane is
    begin
       Done.all := [others => [others => False]];
 
+      declare
+         Max_Grey : Grey_Type := 0.0;
+      begin
+         for I in First_I .. Last_I loop
+            for J in First_J .. Last_J loop
+               Max_Grey := Grey_Type'Max (Max_Grey, the_matrix (I, J));
+            end loop;
+         end loop;
+         if Max_Grey > 0.0 then
+            Scale := Settings.height / Float (Max_Grey);
+         end if;
+      end;
+
       --  The bottom is always flat across the whole grid: a single fan
       --  is enough for the entire perimeter, instead of a pair of
       --  triangles per pixel.
       if Last_I > First_I and then Last_J > First_J then
          Emit_Flat_Rect_Fan
-           (First_I, Last_I, First_J, Last_J, Width, Clockwise => True);
+           (First_I, Last_I, First_J, Last_J, Z, Clockwise => True);
       end if;
 
       for I in First_I .. Last_I - 1 loop
@@ -345,19 +384,19 @@ package body Lithophane is
 
             declare
                P00 : constant Point :=
-                 (Float (I), Float (J), Float (the_matrix (I, J)) / Reductor);
+                 (Float (I), Float (J), Float (the_matrix (I, J)) * Scale);
                P10 : constant Point :=
                  (Float (I + 1),
                   Float (J),
-                  Float (the_matrix (I + 1, J)) / Reductor);
+                  Float (the_matrix (I + 1, J)) * Scale);
                P01 : constant Point :=
                  (Float (I),
                   Float (J + 1),
-                  Float (the_matrix (I, J + 1)) / Reductor);
+                  Float (the_matrix (I, J + 1)) * Scale);
                P11 : constant Point :=
                  (Float (I + 1),
                   Float (J + 1),
-                  Float (the_matrix (I + 1, J + 1)) / Reductor);
+                  Float (the_matrix (I + 1, J + 1)) * Scale);
             begin
 
                --  Surface: merges neighbouring flat cells into a single
@@ -366,8 +405,8 @@ package body Lithophane is
                if not Done (I, J) then
                   if Is_Flat_Cell (I, J) then
                      declare
-                        H      : constant Color_Type := the_matrix (I, J);
-                        Zf     : constant Float := Float (H) / Reductor;
+                        H      : constant Grey_Type := the_matrix (I, J);
+                        Zf     : constant Float := Float (H) * Scale;
                         W      : Natural := 1;
                         Ht     : Natural := 1;
                         Row_OK : Boolean;
@@ -420,33 +459,33 @@ package body Lithophane is
                if I = First_I then
                   Emit_ACB
                     (P00,
-                     (Float (I), Float (J + 1), Width),
-                     (Float (I), Float (J), Width));
-                  Emit_ACB (P00, P01, (Float (I), Float (J + 1), Width));
+                     (Float (I), Float (J + 1), Z),
+                     (Float (I), Float (J), Z));
+                  Emit_ACB (P00, P01, (Float (I), Float (J + 1), Z));
                end if;
 
                if J = First_J then
                   Emit_ACB
                     (P00,
-                     (Float (I), Float (J), Width),
-                     (Float (I + 1), Float (J), Width));
-                  Emit_ACB (P00, (Float (I + 1), Float (J), Width), P10);
+                     (Float (I), Float (J), Z),
+                     (Float (I + 1), Float (J), Z));
+                  Emit_ACB (P00, (Float (I + 1), Float (J), Z), P10);
                end if;
 
                if I + 1 = Last_I then
                   Emit_ACB
                     (P10,
-                     (Float (I + 1), Float (J), Width),
-                     (Float (I + 1), Float (J + 1), Width));
-                  Emit_ABC (P10, (Float (I + 1), Float (J + 1), Width), P11);
+                     (Float (I + 1), Float (J), Z),
+                     (Float (I + 1), Float (J + 1), Z));
+                  Emit_ABC (P10, (Float (I + 1), Float (J + 1), Z), P11);
                end if;
 
                if J + 1 = Last_J then
                   Emit_ABC
                     (P01,
-                     (Float (I + 1), Float (J + 1), Width),
-                     (Float (I), Float (J + 1), Width));
-                  Emit_ACB (P01, P11, (Float (I + 1), Float (J + 1), Width));
+                     (Float (I + 1), Float (J + 1), Z),
+                     (Float (I), Float (J + 1), Z));
+                  Emit_ACB (P01, P11, (Float (I + 1), Float (J + 1), Z));
                end if;
             end;
 

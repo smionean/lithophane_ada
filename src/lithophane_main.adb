@@ -4,10 +4,16 @@
 --  Program entry point. Drives the whole pipeline:
 --    * parse the command line (GNAT.Command_Line) and print help/version;
 --    * load the input image with GID into a raw 24-bit RGB bitmap;
---    * convert it to a greyscale colour matrix (optionally saved as PGM);
+--    * convert it to a normalised greyscale height map (Grey_Type,
+--      1.0 - luminance, so dark pixels become thick; optionally saved as
+--      PGM), surrounded by a border of 1.0;
 --    * pick and apply the requested filter (bartlett, gauss, square,
---      sharpen, threshold), optionally overridden by a TOML config;
---    * build the mesh via Lithophane.Calculate_Facets and write it out as
+--      sharpen), optionally overridden by a TOML config;
+--    * always apply the threshold filter (Settings.filter_threshold,
+--      0.0 .. 1.0, set with -t/--threshold);
+--    * shrink the height map so its larger side fits Settings.max_size;
+--    * build the mesh via Lithophane.Calculate_Facets (relief scaled by
+--      Settings.height, set with -H/--height) and write it out as
 --      binary STL, ASCII STL and/or 3MF.
 --
 --  Created : 2026-08-23
@@ -36,7 +42,7 @@ with Lithophane.Image_Utilities; use Lithophane.Image_Utilities;
 
 procedure Lithophane_Main is
 
-   Lithophane_Version : constant String := "1.0.0";
+   Lithophane_Version : constant String := "1.1.0";
 
    --
    --  Version
@@ -58,9 +64,8 @@ procedure Lithophane_Main is
       Put_Line
         (Standard_Error,
          "-f<a_filter> --filter <a_filter> [<n>] ; <a_filter> is one of"
-         & " bartlett, gauss, square, sharpen, threshold. The optional <n>"
-         & " that follows is the filter size (odd number) or, for the"
-         & " threshold filter, the threshold value 0 .. 255."
+         & " bartlett, gauss, square, sharpen, none. The optional <n>"
+         & " that follows is the filter size (odd number, default 3)."
          & " Example: lithophane --filter gauss 5 image.png");
       Put_Line (Standard_Error, "-b --save-binary");
       Put_Line (Standard_Error, "-a --save-ascii");
@@ -70,8 +75,14 @@ procedure Lithophane_Main is
       Put_Line (Standard_Error, "-B<a_border> --border=<a_border>");
       Put_Line
         (Standard_Error,
-         "-t<threshold> --threshold=<threshold> ; threshold value 0 .. 255"
-         & " for the threshold filter");
+         "-H<a_height> --height=<a_height> ; maximum relief height in mm:"
+         & " the highest point lies at this height (positive number,"
+         & " default 10.0)");
+      Put_Line
+        (Standard_Error,
+         "-t<threshold> --threshold=<threshold> ; grey level 0.0 .. 1.0"
+         & " (default 0.5) below which pixels are cut to 0.0; always"
+         & " applied, use 0 to keep every pixel");
       Put_Line
         (Standard_Error,
          "-M<max_size> --max_size=<max_size> ; maximum image dimension in"
@@ -192,7 +203,7 @@ procedure Lithophane_Main is
    end Load_Raw_Image;
 
    procedure Dump_PGM
-     (name : String; i : GID.Image_Descriptor; the_image : Matrix_Access)
+     (name : String; i : GID.Image_Descriptor; the_image : Matrix_Grey_Access)
    is
       F : Ada.Text_IO.File_Type;
    begin
@@ -225,7 +236,7 @@ procedure Lithophane_Main is
    --   @param Settings the settings for the lithophane generation
    --
    procedure Process_Image
-     (the_image : Matrix_Access; Settings : Settings_Record) is
+     (the_image : Matrix_Grey_Access; Settings : Settings_Record) is
    begin
 
       --  apply a filter
@@ -268,14 +279,14 @@ procedure Lithophane_Main is
    --   @param Settings the settings for the lithophane generation
    --
    procedure Generate_Lithophane
-     (the_image  : Matrix_Access;
+     (the_image  : Matrix_Grey_Access;
       img_descrp : GID.Image_Descriptor;
       Settings   : Settings_Record)
    is
       Facets_List : Facets.Vector;
    begin
       Process_Image (the_image, Settings);
-      Facets_List := Calculate_Facets (the_image);
+      Facets_List := Calculate_Facets (the_image, Settings);
 
       if Settings.save_as_ascii then
          Dump_STL_ASCII (Facets_List, Settings);
@@ -315,7 +326,7 @@ procedure Lithophane_Main is
       rouge : Color_Type := 0;
       bleu  : Color_Type := 0;
       vert  : Color_Type := 0;
-      grey  : Color_Type := 0;
+      grey  : Grey_Type := 0.0;
    begin
       Open (F, In_File, Ada.Strings.Unbounded.To_String (Settings.filename));
       Put_Line
@@ -348,15 +359,15 @@ procedure Lithophane_Main is
          --  Color_Type matrices; they were written but never used, so for a
          --  large photo they wasted ~3x the height map's memory (which, with
          --  the facet list, is what pushed the 3MF path into Storage_Error).
-         matgrey : constant Matrix_Access :=
-           new Matrix_Type
+         matgrey : constant Matrix_Grey_Access :=
+           new Matrix_Grey_Type
                  (1 .. GID.Pixel_Width (img_descrp) + 2 * Settings.border,
                   1 .. GID.Pixel_Height (img_descrp) + 2 * Settings.border);
       begin
          Put_Line ("IMGBUF " & img_buf'First'Img);
          for i in matgrey'Range (1) loop
             for j in matgrey'Range (2) loop
-               matgrey (i, j) := 255;
+               matgrey (i, j) := 1.0;
             end loop;
          end loop;
 
@@ -375,10 +386,11 @@ procedure Lithophane_Main is
                end if;
             end if;
             grey :=
-              255
-              - Color_Type
-                  (0.2989 * Float (rouge) + 0.5870 * Float (vert)
-                   + 0.1140 * Float (bleu));
+              Grey_Type
+                (1.0
+                 - (0.2989 * Float (rouge) + 0.5870 * Float (vert)
+                    + 0.1140 * Float (bleu))
+                   / 255.0);
             --  Put_Line ("GREY " & grey'Img);
             matgrey (c + Settings.border, l + Settings.border) := grey;
             x := x + 1;
@@ -414,7 +426,7 @@ procedure Lithophane_Main is
                new_height : constant Natural :=
                  Calculate_New_Image_Size
                    (matgrey'Length (1), matgrey'Length (2), tHEIGHT, Settings);
-               resized    : constant Matrix_Access :=
+               resized    : constant Matrix_Grey_Access :=
                  Resize_Image (matgrey, new_width, new_height);
             begin
                Generate_Lithophane (resized, img_descrp, Settings);
@@ -493,8 +505,7 @@ procedure Lithophane_Main is
 
    --  Set as soon as a --filter/-f switch is seen. It tells the code after the
    --  Getopt loop that the next positional argument (if it is a number) is the
-   --  filter parameter: filter_threshold for the threshold filter, filter_size
-   --  for every other filter. Example: lithophane --filter gauss 5 image.png
+   --  filter size. Example: lithophane --filter gauss 5 image.png
    Filter_Given : Boolean := False;
 
    --  Decode a --filter/-f value into Settings.filter. An unknown name would
@@ -509,7 +520,7 @@ procedure Lithophane_Main is
            ("unknown filter """
             & Name
             & """; expected one of bartlett, gauss, square, sharpen,"
-            & " threshold");
+            & " none");
    end Set_Filter;
 
    --  Decode a --border/-B value into Settings.border, rejecting anything
@@ -525,17 +536,35 @@ procedure Lithophane_Main is
             & """; expected a non-negative integer");
    end Set_Border;
 
+   --  Decode a --height/-H value into Settings.height, rejecting anything
+   --  that is not a positive number.
+   procedure Set_Height (Spec : String) is
+      Value : Float;
+   begin
+      Value := Float'Value (Spec);
+      if Value <= 0.0 then
+         raise Constraint_Error;
+      end if;
+      Settings.height := Value;
+   exception
+      when Constraint_Error =>
+         Fail
+           ("invalid height value """
+            & Spec
+            & """; expected a positive number");
+   end Set_Height;
+
    --  Decode a --threshold/-t value into Settings.filter_threshold, rejecting
-   --  anything that is not a plain integer in the 0 .. 255 range.
+   --  anything that is not a number in the 0.0 .. 1.0 range.
    procedure Set_Threshold (Spec : String) is
    begin
-      Settings.filter_threshold := Color_Type'Value (Spec);
+      Settings.filter_threshold := Grey_Type'Value (Spec);
    exception
       when Constraint_Error =>
          Fail
            ("invalid threshold value """
             & Spec
-            & """; expected an integer between 0 and 255");
+            & """; expected a number between 0.0 and 1.0");
    end Set_Threshold;
 
    --  Decode a --max_size/-M value into Settings.max_size, rejecting anything
@@ -640,7 +669,7 @@ begin
       case Getopt
              ("h -help v -version f: -filter= b -save-binary a -save-ascii"
               & " m -save-3mf p -save-pgm o: -output-name="
-              & " B: -border= t: -threshold= M: -max_size="
+              & " B: -border= H: -height= t: -threshold= M: -max_size="
               & " c: -config= -dimensions=")
       is
          when 'h'    =>
@@ -678,6 +707,10 @@ begin
          when 'B'    =>
             Put_Line ("Border");
             Set_Border (Parameter);
+
+         when 'H'    =>
+            Put_Line ("Seen -H with arg=" & Parameter);
+            Set_Height (Parameter);
 
          when 't'    =>
             Put_Line ("Seen -t with arg=" & Parameter);
@@ -717,6 +750,9 @@ begin
             elsif Full_Switch = "-border" then
                Set_Border (Parameter);
                Put_Line ("Seen --border with arg=" & Settings.border'Img);
+            elsif Full_Switch = "-height" then
+               Set_Height (Parameter);
+               Put_Line ("Seen --height with arg=" & Settings.height'Img);
             elsif Full_Switch = "-threshold" then
                Set_Threshold (Parameter);
                Put_Line

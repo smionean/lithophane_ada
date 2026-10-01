@@ -240,9 +240,12 @@ package body Lithophane.File3mf is
          end loop;
 
          --  Pass 2: derive the per-axis scale. An axis with a requested
-         --  size uses it directly; an unconstrained axis (0.0) borrows the
-         --  scale of the first constrained one, so proportions are
-         --  preserved. With no dimensions requested every scale stays 1.0.
+         --  size uses it directly; an unconstrained X or Y axis (0.0)
+         --  borrows the scale of the first constrained one, so the picture
+         --  keeps its aspect ratio. Z is only scaled when a depth is
+         --  requested: otherwise it stays at 1.0, so the relief keeps the
+         --  height in millimetres set by Settings.height. With no dimensions
+         --  requested every scale stays 1.0.
          declare
             Ext_X : constant Float := Float'Max (Max_X - Min_X, 1.0e-6);
             Ext_Y : constant Float := Float'Max (Max_Y - Min_Y, 1.0e-6);
@@ -258,7 +261,7 @@ package body Lithophane.File3mf is
          begin
             Sx := (if D.width > 0.0 then D.width / Ext_X else Ref);
             Sy := (if D.height > 0.0 then D.height / Ext_Y else Ref);
-            Sz := (if D.depth > 0.0 then D.depth / Ext_Z else Ref);
+            Sz := (if D.depth > 0.0 then D.depth / Ext_Z else 1.0);
             Out_W := Ext_X * Sx;
             Out_H := Ext_Y * Sy;
             Out_D := Ext_Z * Sz;

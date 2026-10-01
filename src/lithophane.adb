@@ -156,10 +156,12 @@ package body Lithophane is
          V := Field ("height", TOML.TOML_Float);
          if V.Is_Present and then TOML.As_Float (V).Value > 0.0 then
             Settings.height := Float (TOML.As_Float (V).Value);
+            Settings.height_is_set := True;
          end if;
          V := Field ("height", TOML.TOML_Integer);
          if V.Is_Present and then TOML.As_Integer (V) > 0 then
             Settings.height := Float (TOML.As_Integer (V));
+            Settings.height_is_set := True;
          end if;
 
          --  dimensions = { width = <mm>, height = <mm>, depth = <mm> }

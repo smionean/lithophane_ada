@@ -35,9 +35,11 @@ package Lithophane is
 
    --  Target physical size of the model, in millimetres, applied when a 3MF
    --  file is written (3MF geometry is unit-aware, STL is not). A value of
-   --  0.0 on an axis means "do not constrain that axis": its scale is then
-   --  inherited from whichever axis is set, so the model keeps its natural
-   --  proportions. If every axis is 0.0 the mesh is written unscaled.
+   --  0.0 on width or height means "do not constrain that axis": its scale
+   --  is then inherited from whichever axis is set, so the picture keeps its
+   --  aspect ratio. A depth of 0.0 leaves Z unscaled, so the relief keeps
+   --  the height set by Settings_Record.height; a non-zero depth overrides
+   --  it. If every axis is 0.0 the mesh is written unscaled.
    type Dimensions_Type is record
       width  : Float := 0.0;   --  X extent
       height : Float := 0.0;   --  Y extent
@@ -49,6 +51,8 @@ package Lithophane is
       height           : Float := 10.0;
       --  maximum relief height in mm: the highest point of the relief lies
       --  at Z = height (the brightest grey is scaled to it)
+      height_is_set    : Boolean := False;
+      --  True once height was given explicitly (command line or config)
       filter           : Filters_Choice := none;
       filter_size      : Natural := 3;
       filter_threshold : Grey_Type := 0.5;

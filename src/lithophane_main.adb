@@ -90,7 +90,8 @@ procedure Lithophane_Main is
       Put_Line
         (Standard_Error,
          "--dimensions=<W>x<H>x<D> ; target 3MF size in mm; an empty or 0"
-         & " component leaves that axis proportional."
+         & " W or H keeps the picture's aspect ratio; an empty or 0 D keeps"
+         & " the relief height set by --height, a non-zero D overrides it."
          & " Example: --dimensions=100x100x1.5");
       Put_Line
         (Standard_Error,
@@ -546,6 +547,7 @@ procedure Lithophane_Main is
          raise Constraint_Error;
       end if;
       Settings.height := Value;
+      Settings.height_is_set := True;
    exception
       when Constraint_Error =>
          Fail
@@ -609,7 +611,7 @@ procedure Lithophane_Main is
    --  Parse a "--dimensions=WxHxD" value into Settings.dimensions (in mm,
    --  applied only to the 3MF output). Any component may be left empty or
    --  set to 0 to leave that axis unconstrained, e.g. "--dimensions=100x100x"
-   --  fixes width and height and lets the depth follow proportionally.
+   --  fixes width and height and leaves the depth to Settings.height.
    procedure Parse_Dimensions (Spec : String) is
       Start : Positive := Spec'First;
       Axis  : Natural := 0;
@@ -794,6 +796,20 @@ begin
       Help;
       Set_Exit_Status (Failure);
       return;
+   end if;
+
+   --  In the 3MF output a requested depth fixes the total thickness, so an
+   --  explicit height no longer gives the relief height in millimetres.
+   if Settings.save_as_3mf
+     and then Settings.height_is_set
+     and then Settings.dimensions.depth > 0.0
+   then
+      Put_Line
+        (Standard_Error,
+         "Warning: the depth given in --dimensions overrides --height in"
+         & " the 3MF output: the total thickness (base + relief) is"
+         & Settings.dimensions.depth'Img
+         & " mm");
    end if;
 
    Prepare_Lithophane (Settings);

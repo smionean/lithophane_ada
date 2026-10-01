@@ -28,8 +28,10 @@ package Lithophane.File3mf is
    --
    --  If Settings.dimensions requests a physical size, the mesh is scaled so
    --  its bounding box matches: each axis with a non-zero value is scaled to
-   --  it exactly, and an axis left at 0.0 follows the first constrained axis
-   --  so the model keeps its proportions. 3MF is declared in millimetres.
+   --  it exactly, and a width or height left at 0.0 follows the first
+   --  constrained axis so the picture keeps its aspect ratio. A depth left
+   --  at 0.0 leaves Z unscaled (the relief keeps Settings.height, in mm).
+   --  3MF is declared in millimetres.
    procedure Dump_3mf
      (Facets_List : Facets.Vector; Settings : Settings_Record);
 

@@ -203,21 +203,50 @@ procedure Lithophane_Main is
       Load_Image (image, next_frame);
    end Load_Raw_Image;
 
-   procedure Dump_PGM
-     (name : String; i : GID.Image_Descriptor; the_image : Matrix_Grey_Access)
+   procedure Print_Matrix_PGM
+     (the_matrix : Matrix_Grey_Access;
+      F          : Ada.Text_IO.File_Type := Standard_Output)
    is
+      --  Plain PGM lines should not exceed 70 characters; a sample takes at
+      --  most 4 (" 255").
+      Samples_Per_Line : constant := 17;
+      count            : Natural := 0;
+   begin
+      --  The matrix is indexed (column, row) with row 1 at the bottom of
+      --  the picture (GID's convention), while PGM is written row by row
+      --  from the top: the row index is the outer loop, in reverse.
+      for j in reverse the_matrix.all'Range (2) loop
+         for i in the_matrix.all'Range (1) loop
+            --  The conversion to Integer already rounds to nearest.
+            Put
+              (F, Integer'Image (Integer ((1.0 - the_matrix (i, j)) * 255.0)));
+            count := count + 1;
+            if count = Samples_Per_Line then
+               New_Line (F);
+               count := 0;
+            end if;
+         end loop;
+         if count /= 0 then
+            New_Line (F);
+            count := 0;
+         end if;
+      end loop;
+   end Print_Matrix_PGM;
+
+   procedure Dump_PGM (name : String; the_image : Matrix_Grey_Access) is
       F : Ada.Text_IO.File_Type;
    begin
       Create (F, Out_File, name & ".pgm");
-      --  PPM Header:
+      --  PGM header: width then height, taken from the matrix itself (it
+      --  includes the border and may have been resized).
       Put_Line (F, "P2");
       Put_Line
         (F,
-         Integer'Image (GID.Pixel_Height (i))
+         Integer'Image (the_image'Length (1))
          & " "
-         & Integer'Image (GID.Pixel_Width (i)));
+         & Integer'Image (the_image'Length (2)));
       Put_Line (F, "255");
-      Print_Matrix (the_image, F);
+      Print_Matrix_PGM (the_image, F);
       Close (F);
    exception
       when E : others =>
@@ -276,13 +305,10 @@ procedure Lithophane_Main is
    --
    --  Generate_Lithophane
    --   @param the_image the greyscale image to convert into a lithophane
-   --   @param img_descrp the GID descriptor of the source image
    --   @param Settings the settings for the lithophane generation
    --
    procedure Generate_Lithophane
-     (the_image  : Matrix_Grey_Access;
-      img_descrp : GID.Image_Descriptor;
-      Settings   : Settings_Record)
+     (the_image : Matrix_Grey_Access; Settings : Settings_Record)
    is
       Facets_List : Facets.Vector;
    begin
@@ -303,9 +329,7 @@ procedure Lithophane_Main is
 
       if Settings.save_pgm then
          Dump_PGM
-           (Ada.Strings.Unbounded.To_String (Settings.outfilename),
-            img_descrp,
-            the_image);
+           (Ada.Strings.Unbounded.To_String (Settings.outfilename), the_image);
       end if;
    end Generate_Lithophane;
 
@@ -430,10 +454,10 @@ procedure Lithophane_Main is
                resized    : constant Matrix_Grey_Access :=
                  Resize_Image (matgrey, new_width, new_height);
             begin
-               Generate_Lithophane (resized, img_descrp, Settings);
+               Generate_Lithophane (resized, Settings);
             end;
          else
-            Generate_Lithophane (matgrey, img_descrp, Settings);
+            Generate_Lithophane (matgrey, Settings);
          end if;
       end;
 

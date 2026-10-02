@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.1.0] - 2026-10-02
 
 ### Added
 - `-H`/`--height` option (and `height` config key): maximum relief height in

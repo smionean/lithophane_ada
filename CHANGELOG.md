@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.2.0] - 2026-10-04
+
+### Added
+- `-d` as the short form of `--dimensions`.
+- `--save-stl-binary` and `--save-stl-ascii`; `--save-binary` and
+  `--save-ascii` are still accepted.
+- `-?` as another spelling of `-h`/`--help`.
+- The value of a long option may follow `=` or be the next argument
+  (`--height=5`, `--height 5`).
+
+### Changed
+- The command line is now parsed with AdaCL (`AdaCL.Command_Line.GetOpt`, new
+  dependency `adacl_desktop`) instead of `GNAT.Command_Line`.
+- `--threshold` is renamed `--filter-threshold` and `--max_size` is renamed
+  `--max-size`; the old spellings are no longer accepted. The short forms
+  (`-t`, `-M`) and the config keys are unchanged.
+- An input file given on the command line replaces the `input-name` of a
+  config file instead of being ignored.
+- An invalid filter size, a malformed `--dimensions` value and a second input
+  file are now errors instead of being ignored.
+- The help is written to standard output and lists AdaCL's trace options; a
+  command line error prints a one-line message instead of the full help.
+
+### Removed
+- Debug traces printed while the options were read.
+- Unused `getopt` dependency.
+
 ## [1.1.0] - 2026-10-02
 
 ### Added

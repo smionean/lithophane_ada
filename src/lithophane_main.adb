@@ -2,7 +2,7 @@
 --  lithophane_main.adb
 --
 --  Program entry point. Drives the whole pipeline:
---    * parse the command line (GNAT.Command_Line) and print help/version;
+--    * parse the command line (Lithophane.Commandline) and print help/version;
 --    * load the input image with GID into a raw 24-bit RGB bitmap;
 --    * convert it to a normalised greyscale height map (Grey_Type,
 --      1.0 - luminance, so dark pixels become thick; optionally saved as
@@ -10,7 +10,7 @@
 --    * pick and apply the requested filter (bartlett, gauss, square,
 --      sharpen), optionally overridden by a TOML config;
 --    * always apply the threshold filter (Settings.filter_threshold,
---      0.0 .. 1.0, set with -t/--threshold);
+--      0.0 .. 1.0, set with -t/--filter-threshold);
 --    * shrink the height map so its larger side fits Settings.max_size;
 --    * build the mesh via Lithophane.Calculate_Facets (relief scaled by
 --      Settings.height, set with -H/--height) and write it out as
@@ -30,11 +30,12 @@ with Ada.Streams.Stream_IO;   use Ada.Streams.Stream_IO;
 with Ada.Text_IO;             use Ada.Text_IO;
 with Ada.Unchecked_Deallocation;
 with Ada.Strings.Unbounded;
-with GNAT.Command_Line;       use GNAT.Command_Line;
+with AdaCL.Command_Line.GetOpt;
 
 with Interfaces;
 
 with Lithophane;                 use Lithophane;
+with Lithophane.Commandline;
 with Lithophane.STL;             use Lithophane.STL;
 with Lithophane.File3mf;         use Lithophane.File3mf;
 with Lithophane.Filters;         use Lithophane.Filters;
@@ -42,7 +43,7 @@ with Lithophane.Image_Utilities; use Lithophane.Image_Utilities;
 
 procedure Lithophane_Main is
 
-   Lithophane_Version : constant String := "1.1.0";
+   Lithophane_Version : constant String := "1.2.0";
 
    --
    --  Version
@@ -51,53 +52,6 @@ procedure Lithophane_Main is
    begin
       Put_Line (Standard_Error, "Lithophane " & Lithophane_Version);
    end Version;
-
-   --
-   --  Help
-   --
-   procedure Help is
-   begin
-      Version;
-      Put_Line (Standard_Error, "Usage: lithophane [options] <input_file>");
-      Put_Line (Standard_Error, "Options:");
-      Put_Line (Standard_Error, "-h --help");
-      Put_Line
-        (Standard_Error,
-         "-f<a_filter> --filter <a_filter> [<n>] ; <a_filter> is one of"
-         & " bartlett, gauss, square, sharpen, none. The optional <n>"
-         & " that follows is the filter size (odd number, default 3)."
-         & " Example: lithophane --filter gauss 5 image.png");
-      Put_Line (Standard_Error, "-b --save-binary");
-      Put_Line (Standard_Error, "-a --save-ascii");
-      Put_Line (Standard_Error, "-m --save-3mf");
-      Put_Line (Standard_Error, "-p --save-pgm");
-      Put_Line (Standard_Error, "-o<a_filename> --output-name=<a_filename>");
-      Put_Line (Standard_Error, "-B<a_border> --border=<a_border>");
-      Put_Line
-        (Standard_Error,
-         "-H<a_height> --height=<a_height> ; maximum relief height in mm:"
-         & " the highest point lies at this height (positive number,"
-         & " default 10.0)");
-      Put_Line
-        (Standard_Error,
-         "-t<threshold> --threshold=<threshold> ; grey level 0.0 .. 1.0"
-         & " (default 0.5) below which pixels are cut to 0.0; always"
-         & " applied, use 0 to keep every pixel");
-      Put_Line
-        (Standard_Error,
-         "-M<max_size> --max_size=<max_size> ; maximum image dimension in"
-         & " pixels (0 = no limit); larger images are resized down");
-      Put_Line
-        (Standard_Error,
-         "--dimensions=<W>x<H>x<D> ; target 3MF size in mm; an empty or 0"
-         & " W or H keeps the picture's aspect ratio; an empty or 0 D keeps"
-         & " the relief height set by --height, a non-zero D overrides it."
-         & " Example: --dimensions=100x100x1.5");
-      Put_Line
-        (Standard_Error,
-         "-c<a_config_file> --config=<a_config_file> ; note:  it overwrites"
-         & " previous options");
-   end Help;
 
    --  Raised once a fatal, user-facing problem has been reported (the
    --  human-readable diagnostic is printed by Fail before the exception is
@@ -526,298 +480,29 @@ procedure Lithophane_Main is
             & Exception_Message (E));
    end Prepare_Lithophane;
 
+   Options  : Lithophane.Commandline.Object;
    Settings : Settings_Record;
-
-   --  Set as soon as a --filter/-f switch is seen. It tells the code after the
-   --  Getopt loop that the next positional argument (if it is a number) is the
-   --  filter size. Example: lithophane --filter gauss 5 image.png
-   Filter_Given : Boolean := False;
-
-   --  Decode a --filter/-f value into Settings.filter. An unknown name would
-   --  otherwise leak a bare Constraint_Error out of Filters_Choice'Value.
-   procedure Set_Filter (Name : String) is
-   begin
-      Settings.filter := Lithophane.Filters_Choice'Value (Name);
-      Filter_Given := True;
-   exception
-      when Constraint_Error =>
-         Fail
-           ("unknown filter """
-            & Name
-            & """; expected one of bartlett, gauss, square, sharpen,"
-            & " none");
-   end Set_Filter;
-
-   --  Decode a --border/-B value into Settings.border, rejecting anything
-   --  that is not a plain non-negative integer.
-   procedure Set_Border (Spec : String) is
-   begin
-      Settings.border := Natural'Value (Spec);
-   exception
-      when Constraint_Error =>
-         Fail
-           ("invalid border value """
-            & Spec
-            & """; expected a non-negative integer");
-   end Set_Border;
-
-   --  Decode a --height/-H value into Settings.height, rejecting anything
-   --  that is not a positive number.
-   procedure Set_Height (Spec : String) is
-      Value : Float;
-   begin
-      Value := Float'Value (Spec);
-      if Value <= 0.0 then
-         raise Constraint_Error;
-      end if;
-      Settings.height := Value;
-      Settings.height_is_set := True;
-   exception
-      when Constraint_Error =>
-         Fail
-           ("invalid height value """
-            & Spec
-            & """; expected a positive number");
-   end Set_Height;
-
-   --  Decode a --threshold/-t value into Settings.filter_threshold, rejecting
-   --  anything that is not a number in the 0.0 .. 1.0 range.
-   procedure Set_Threshold (Spec : String) is
-   begin
-      Settings.filter_threshold := Grey_Type'Value (Spec);
-   exception
-      when Constraint_Error =>
-         Fail
-           ("invalid threshold value """
-            & Spec
-            & """; expected a number between 0.0 and 1.0");
-   end Set_Threshold;
-
-   --  Decode a --max_size/-M value into Settings.max_size, rejecting anything
-   --  that is not a plain non-negative integer (0 = no limit).
-   procedure Set_Max_Size (Spec : String) is
-   begin
-      Settings.max_size := Natural'Value (Spec);
-   exception
-      when Constraint_Error =>
-         Fail
-           ("invalid max_size value """
-            & Spec
-            & """; expected a non-negative integer");
-   end Set_Max_Size;
-
-   --  Read the numeric argument that follows a --filter switch, if any, and
-   --  store it in the relevant Settings field. When the next argument is not a
-   --  plain number it is the input file name instead, so keep it for later.
-   procedure Get_Filter_Argument is
-      Extra : constant String := Get_Argument;
-   begin
-      if Extra = "" then
-         return;
-      elsif (for all C of Extra => C in '0' .. '9') then
-         if Natural'Value (Extra) >= 3 and then Natural'Value (Extra) mod 2 = 1
-         then
-            Settings.filter_size := Natural'Value (Extra);
-            Put_Line ("Filter size =" & Settings.filter_size'Img);
-         end if;
-      else
-         Settings.filename :=
-           Ada.Strings.Unbounded.To_Unbounded_String (Extra);
-      end if;
-   exception
-      when Constraint_Error =>
-         --  Extra is all digits but does not fit the target type; treat it
-         --  as "no valid parameter given" and keep the defaults.
-         Put_Line
-           (Standard_Error, "ignoring out-of-range filter argument: " & Extra);
-   end Get_Filter_Argument;
-
-   --  Parse a "--dimensions=WxHxD" value into Settings.dimensions (in mm,
-   --  applied only to the 3MF output). Any component may be left empty or
-   --  set to 0 to leave that axis unconstrained, e.g. "--dimensions=100x100x"
-   --  fixes width and height and leaves the depth to Settings.height.
-   procedure Parse_Dimensions (Spec : String) is
-      Start : Positive := Spec'First;
-      Axis  : Natural := 0;
-
-      procedure Take (S : String) is
-         Val : Float := 0.0;
-      begin
-         if S /= "" then
-            begin
-               Val := Float'Value (S);
-            exception
-               when others =>
-                  Put_Line (Standard_Error, "ignoring bad dimension: " & S);
-                  Val := 0.0;
-            end;
-         end if;
-         case Axis is
-            when 0      =>
-               Settings.dimensions.width := Val;
-
-            when 1      =>
-               Settings.dimensions.height := Val;
-
-            when 2      =>
-               Settings.dimensions.depth := Val;
-
-            when others =>
-               null;
-         end case;
-         Axis := Axis + 1;
-      end Take;
-   begin
-      for I in Spec'Range loop
-         if Spec (I) in 'x' | 'X' then
-            Take (Spec (Start .. I - 1));
-            Start := I + 1;
-         end if;
-      end loop;
-      Take (Spec (Start .. Spec'Last));
-      Put_Line
-        (Standard_Error,
-         "Dimensions (mm): "
-         & Settings.dimensions.width'Img
-         & " x"
-         & Settings.dimensions.height'Img
-         & " x"
-         & Settings.dimensions.depth'Img);
-   end Parse_Dimensions;
 
 begin
    if Argument_Count < 1 then
-      Help;
+      Options.Write_Help;
       return;
    end if;
 
-   loop
-      case Getopt
-             ("h -help v -version f: -filter= b -save-binary a -save-ascii"
-              & " m -save-3mf p -save-pgm o: -output-name="
-              & " B: -border= H: -height= t: -threshold= M: -max_size="
-              & " c: -config= -dimensions=")
-      is
-         when 'h'    =>
-            Put_Line ("Get help");
-            Help;
-            return;
+   Options.Parse;
 
-         when 'v'    =>
-            Version;
-            return;
-
-         when 'f'    =>
-            Put_Line ("Seen -f with arg=" & Parameter);
-            Set_Filter (Parameter);
-
-         when 'b'    =>
-            Put_Line ("Save stl-bin");
-            Settings.save_as_binary := True;
-
-         when 'a'    =>
-            Put_Line ("Save stl-acii");
-            Settings.save_as_ascii := True;
-
-         when 'm'    =>
-            Put_Line ("Save 3mf");
-            Settings.save_as_3mf := True;
-
-         when 'p'    =>
-            Settings.save_pgm := True;
-
-         when 'o'    =>
-            Settings.outfilename :=
-              Ada.Strings.Unbounded.To_Unbounded_String (Parameter);
-
-         when 'B'    =>
-            Put_Line ("Border");
-            Set_Border (Parameter);
-
-         when 'H'    =>
-            Put_Line ("Seen -H with arg=" & Parameter);
-            Set_Height (Parameter);
-
-         when 't'    =>
-            Put_Line ("Seen -t with arg=" & Parameter);
-            Set_Threshold (Parameter);
-
-         when 'M'    =>
-            Put_Line ("Seen -M with arg=" & Parameter);
-            Set_Max_Size (Parameter);
-
-         when 'c'    =>
-            Settings.config :=
-              Ada.Strings.Unbounded.To_Unbounded_String (Parameter);
-            Put_Line
-              ("Config file : "
-               & Ada.Strings.Unbounded.To_String (Settings.config));
-            Parse_Config (Settings);
-
-         when '-'    =>
-            if Full_Switch = "-help" then
-               Put_Line ("Seen --help");
-               Help;
-               return;
-            elsif Full_Switch = "-version" then
-               Version;
-            elsif Full_Switch = "-filter" then
-               Put_Line ("Seen --filter with arg=" & Parameter);
-               Set_Filter (Parameter);
-            elsif Full_Switch = "-save-binary" then
-               Put_Line ("Seen --save-binary");
-               Settings.save_as_binary := True;
-            elsif Full_Switch = "-save-ascii" then
-               Put_Line ("Seen --save-ascii");
-               Settings.save_as_ascii := True;
-            elsif Full_Switch = "-save-3mf" then
-               Put_Line ("Seen --save-3mf");
-               Settings.save_as_3mf := True;
-            elsif Full_Switch = "-border" then
-               Set_Border (Parameter);
-               Put_Line ("Seen --border with arg=" & Settings.border'Img);
-            elsif Full_Switch = "-height" then
-               Set_Height (Parameter);
-               Put_Line ("Seen --height with arg=" & Settings.height'Img);
-            elsif Full_Switch = "-threshold" then
-               Set_Threshold (Parameter);
-               Put_Line
-                 ("Seen --threshold with arg="
-                  & Settings.filter_threshold'Img);
-            elsif Full_Switch = "-max_size" then
-               Set_Max_Size (Parameter);
-               Put_Line ("Seen --max_size with arg=" & Settings.max_size'Img);
-            elsif Full_Switch = "-output-name" then
-               Settings.outfilename :=
-                 Ada.Strings.Unbounded.To_Unbounded_String (Parameter);
-            elsif Full_Switch = "-save-pgm" then
-               Settings.save_pgm := True;
-            elsif Full_Switch = "-config" then
-               Settings.config :=
-                 Ada.Strings.Unbounded.To_Unbounded_String (Parameter);
-               Parse_Config (Settings);
-            elsif Full_Switch = "-dimensions" then
-               Parse_Dimensions (Parameter);
-            end if;
-
-         when others =>
-            exit;
-      end case;
-   end loop;
-   if Filter_Given then
-      Get_Filter_Argument;
+   if Options.Is_Help_Requested then
+      return;
+   elsif Options.Is_Version_Requested then
+      Version;
+      return;
    end if;
 
-   if Ada.Strings.Unbounded.Length (Settings.filename) = 0 then
-      Settings.filename :=
-        Ada.Strings.Unbounded.To_Unbounded_String (Get_Argument);
-   end if;
+   Settings := Options.To_Settings;
 
    if Ada.Strings.Unbounded.Length (Settings.filename) = 0 then
-      New_Line (Standard_Error);
       Put_Line (Standard_Error, "Error: no input image file given.");
-      New_Line (Standard_Error);
-      Help;
+      Put_Line (Standard_Error, "Try 'lithophane --help'.");
       Set_Exit_Status (Failure);
       return;
    end if;
@@ -843,21 +528,12 @@ exception
       --  A human-readable diagnostic has already been printed by Fail.
       Set_Exit_Status (Failure);
 
-   when GNAT.Command_Line.Invalid_Switch =>
-      New_Line (Standard_Error);
-      Put_Line
-        (Standard_Error, "Error: invalid command line switch: " & Full_Switch);
-      New_Line (Standard_Error);
-      Help;
-      Set_Exit_Status (Failure);
-
-   when GNAT.Command_Line.Invalid_Parameter =>
-      New_Line (Standard_Error);
-      Put_Line
-        (Standard_Error,
-         "Error: missing parameter for switch: " & Full_Switch);
-      New_Line (Standard_Error);
-      Help;
+   when E :
+     AdaCL.Command_Line.GetOpt.Option_Parse_Error
+     | AdaCL.Command_Line.GetOpt.Option_Wrong_Error
+   =>
+      Put_Line (Standard_Error, "Error: " & Exception_Message (E));
+      Put_Line (Standard_Error, "Try 'lithophane --help'.");
       Set_Exit_Status (Failure);
 
    when E : others =>

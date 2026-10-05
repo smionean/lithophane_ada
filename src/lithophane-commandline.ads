@@ -106,8 +106,8 @@ private
       Filename          : Ada.Strings.Unbounded.Unbounded_String :=
         Ada.Strings.Unbounded.Null_Unbounded_String;
       Filename_Given    : Boolean := False;
-      --  True once the input file was given on the command line itself: it
-      --  then replaces the one a config file may have named.
+      --  True once an input file was given on the command line itself: a
+      --  second one is an error.
       Outfilename       : Ada.Strings.Unbounded.Unbounded_String :=
         Ada.Strings.Unbounded.To_Unbounded_String ("test");
       Config            : Ada.Strings.Unbounded.Unbounded_String :=

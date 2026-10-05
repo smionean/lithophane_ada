@@ -1,0 +1,27 @@
+name = "lithophane_tests"
+description = "Regression tests for lithophane"
+version = "0.0.0"
+
+authors = ["Simon Beàn"]
+maintainers = ["Simon Beàn <smionean@gmail.com>"]
+maintainers-logins = ["smionean"]
+licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+
+executables = ["lithophane_tests"]
+
+# lithophane_tests.gpr extends ../lithophane.gpr, so the project files are
+# listed by hand there instead of being withed by Alire.
+auto-gpr-with = false
+
+[[depends-on]]
+lithophane = "*"
+
+[[pins]]
+lithophane = { path = ".." }
+
+[[depends-on]]
+aunit = ">=24.0.0"
+
+# Same switches as a plain "alr build" of lithophane itself.
+[build-profiles]
+lithophane = "development"

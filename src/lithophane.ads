@@ -104,10 +104,14 @@ package Lithophane is
      (the_matrix : Matrix_Grey_Access;
       F          : Ada.Text_IO.File_Type := Standard_Output);
 
+   Config_Error : exception;
+   --  The config file cannot be read or is not valid TOML; the message of
+   --  the exception says why.
+
    procedure Parse_Config (Settings : in out Settings_Record);
    --  Read the TOML file named by Settings.config and override the matching
-   --  fields of Settings with the values it contains. On error, a diagnostic
-   --  is printed on Standard_Error and Settings is left unchanged.
+   --  fields of Settings with the values it contains. Config_Error is raised,
+   --  and Settings is left unchanged, when the file cannot be loaded.
 
    function Calculate_Facets
      (the_matrix : Matrix_Grey_Access; Settings : Settings_Record)

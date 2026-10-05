@@ -13,6 +13,30 @@ Create [lithophane](https://en.wikipedia.org/wiki/Lithophane) of your favourite 
 alr build
 ```
 
+**Tests**
+```
+alr test
+```
+
+Builds and runs the regression tests of the [tests](tests) crate
+([AUnit](https://github.com/AdaCore/aunit)); the report is written to
+`alire/alr_test_local.log`. To see it on the terminal, run them from the crate
+itself:
+```
+cd tests
+alr run
+```
+
+The tests cover the filters, the image resizing, the mesh, the STL and 3MF
+writers, the config file and the whole command line (the program is run on a
+tiny generated picture). The files it writes are also compared with the ones
+kept in [tests/golden](tests/golden); when a change of the output is intended,
+regenerate them and review their diff:
+```
+cd tests
+LITHOPHANE_UPDATE_GOLDEN=1 alr run
+```
+
 **Usage**
 ```
 bin/lithophane [options] <input_file>
@@ -34,7 +58,7 @@ bin/lithophane [options] <input_file>
 -B<border> --border=<border>
 -d<W>x<H>x<D> --dimensions=<W>x<H>x<D>
 -f<filter> --filter <filter> [<n>]
--t<threshold> --filter-threshold=<threshold>
+-t<threshold> --threshold=<threshold>
 -M<max_size> --max-size=<max_size>
 -c<file> --config=<file>
 ```
@@ -54,7 +78,7 @@ bin/lithophane [options] <input_file>
 | `-f<filter>`, `--filter <filter> [<n>]` | image filter to apply before conversion; `<filter>` is one of `bartlett`, `gauss`, `square`, `sharpen`, `none`. The optional number `<n>` right after the filter name is the kernel size (an odd number, `3` or more, default `3`). |
 | `-t<threshold>`, `--threshold=<threshold>` | grey level, from `0.0` to `1.0` (default `0.5`), below which pixels are cut to `0.0`. The threshold is always applied; use `0` to keep every pixel. |
 | `-M<max_size>`, `--max-size=<max_size>` | maximum image dimension, in pixels, border included (default `1500`, `0` = no limit). When the image is wider or taller than this, it is shrunk (nearest-neighbour, aspect ratio preserved) so its larger side equals `<max_size>` before the mesh is built. |
-| `-c<file>`, `--config=<file>` | read options from a config file instead of (or in addition to) the command line; when given, it overrides any previous option. An input file given on the command line replaces the config file's `input-name`. |
+| `-c<file>`, `--config=<file>` | read options from a config file instead of (or in addition to) the command line; every key it holds overrides the matching command line argument, input file included, wherever `-c` stands on the command line. |
 
 You can combine `-a`, `-b`, `-m` and `-p`: each one adds its own output file,
 they are not mutually exclusive.
@@ -62,7 +86,8 @@ they are not mutually exclusive.
 The value of a short option may be attached or separate (`-H5`, `-H 5`), and
 the value of a long option may follow `=` or be the next argument
 (`--height=5`, `--height 5`). An unknown option, an invalid value or a second
-input file is reported as an error and nothing is generated.
+input file is reported as an error and nothing is generated. The same goes
+for a config file that cannot be found or is not valid TOML.
 
 The `<n>` argument is positional and optional, so both of these work:
 ```
@@ -96,8 +121,10 @@ must be non-negative integers (`max_size = 0` means no limit), otherwise the key
 inline table (`width` / `height` / `depth`, in millimetres, applied to the 3MF
 output); `width` or `height` may be omitted or set to `0` to leave that axis
 proportional, and `depth` may be omitted or set to `0` to keep the relief
-height given by `height`. The config file is read at the point where `-c`/`--config`
-appears on the command line, so options placed *after* it still take effect.
+height given by `height`. The config file always has the last word: a key it
+holds overrides the matching command line argument (`input-name` included),
+whether that argument stands before or after `-c`/`--config`. The command line
+only decides what the config file leaves out.
 
 > [!NOTE]
 > `-f`/`--filter` and `-c`/`--config` are wired up: the selected filter (and its
@@ -106,7 +133,7 @@ appears on the command line, so options placed *after* it still take effect.
 > `-B`/`--border` is wired up too: it sets the white margin added around the
 > image before conversion. A threshold filter is always applied after
 > conversion; its cut level (`0.5`, mid-grey, by default) is set with
-> `-t`/`--filter-threshold` or `filter_threshold`.
+> `-t`/`--threshold` or `filter_threshold`.
 
 Based on [GID](https://gen-img-dec.sourceforge.io)
 

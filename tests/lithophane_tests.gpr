@@ -1,0 +1,19 @@
+with "aunit.gpr";
+
+--  Extends the lithophane project: its units are tested in-process, and
+--  the program itself is linked here too so that the command line tests
+--  always drive an executable built from the same sources as the test
+--  driver (bin/lithophane next to bin/lithophane_tests).
+project Lithophane_Tests extends "../lithophane.gpr" is
+
+   for Source_Dirs use ("src/");
+   for Object_Dir use "obj/";
+   for Create_Missing_Dirs use "True";
+   for Exec_Dir use "bin";
+   for Main use ("lithophane_tests.adb", "lithophane_main.adb");
+
+   package Builder is
+      for Executable ("lithophane_main.adb") use "lithophane";
+   end Builder;
+
+end Lithophane_Tests;

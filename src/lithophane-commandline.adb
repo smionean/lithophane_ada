@@ -204,7 +204,7 @@ package body Lithophane.Commandline is
        config           => This.Config);
 
    --  Read the TOML file named by This.Config and override the matching
-   --  options with the values it contains.
+   --  options, input file included, with the values it contains.
    procedure Apply_Config (This : in out Object) is
       Settings : Settings_Record := This.To_Settings;
    begin
@@ -224,6 +224,12 @@ package body Lithophane.Commandline is
       This.Max_Size := Settings.max_size;
       This.Filename := Settings.filename;
       This.Outfilename := Settings.outfilename;
+   exception
+      when Constraint_Error =>
+         Invalid
+           ("invalid value in config file """
+            & SU.To_String (Settings.config)
+            & """");
    end Apply_Config;
 
    --  Store the value given to a valued option, rejecting anything that
@@ -301,8 +307,8 @@ package body Lithophane.Commandline is
             This.Outfilename := SU.To_Unbounded_String (Spec);
 
          when Opt_Config      =>
+            --  Read once the whole command line is known: see Parse.
             This.Config := SU.To_Unbounded_String (Spec);
-            Apply_Config (This);
 
          when Opt_None        =>
             null;
@@ -378,6 +384,15 @@ package body Lithophane.Commandline is
 
          exit when This.Help_Requested or else This.Version_Requested;
       end loop;
+
+      --  The config file has the last word, wherever -c stands on the
+      --  command line.
+      if not This.Help_Requested
+        and then not This.Version_Requested
+        and then SU.Length (This.Config) > 0
+      then
+         Apply_Config (This);
+      end if;
    end Parse;
 
    overriding
@@ -445,7 +460,7 @@ package body Lithophane.Commandline is
         (Config_Short,
          Config_Long,
          "file",
-         "read options from a TOML file; it overwrites previous options");
+         "read options from a TOML file; it overrides the command line");
       New_Line;
    end Write_Help;
 

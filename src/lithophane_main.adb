@@ -10,7 +10,7 @@
 --    * pick and apply the requested filter (bartlett, gauss, square,
 --      sharpen), optionally overridden by a TOML config;
 --    * always apply the threshold filter (Settings.filter_threshold,
---      0.0 .. 1.0, set with -t/--filter-threshold);
+--      0.0 .. 1.0, set with -t/--threshold);
 --    * shrink the height map so its larger side fits Settings.max_size;
 --    * build the mesh via Lithophane.Calculate_Facets (relief scaled by
 --      Settings.height, set with -H/--height) and write it out as
@@ -528,12 +528,17 @@ exception
       --  A human-readable diagnostic has already been printed by Fail.
       Set_Exit_Status (Failure);
 
-   when E :
-     AdaCL.Command_Line.GetOpt.Option_Parse_Error
-     | AdaCL.Command_Line.GetOpt.Option_Wrong_Error
+   when
+     E :
+       AdaCL.Command_Line.GetOpt.Option_Parse_Error
+       | AdaCL.Command_Line.GetOpt.Option_Wrong_Error
    =>
       Put_Line (Standard_Error, "Error: " & Exception_Message (E));
       Put_Line (Standard_Error, "Try 'lithophane --help'.");
+      Set_Exit_Status (Failure);
+
+   when E : Config_Error =>
+      Put_Line (Standard_Error, "Error: " & Exception_Message (E));
       Set_Exit_Status (Failure);
 
    when E : others =>

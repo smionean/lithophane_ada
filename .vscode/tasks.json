@@ -18,6 +18,16 @@
             "problemMatcher": []
         },
         {
+            "label": "alr: test",
+            "type": "shell",
+            "command": "alr run",
+            "options": {
+                "cwd": "${workspaceFolder}/tests"
+            },
+            "group": "test",
+            "problemMatcher": "$gcc"
+        },
+        {
             "label": "alr: run",
             "type": "shell",
             "command": "alr run",

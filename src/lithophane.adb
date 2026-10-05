@@ -64,22 +64,22 @@ package body Lithophane is
 
    begin
       if not Result.Success then
-         Put_Line
-           (Standard_Error,
-            "error while loading config file " & Config_Name & ":");
-         Put_Line (Standard_Error, TOML.Format_Error (Result));
-         return;
+         raise Config_Error
+           with
+             "cannot load config file """
+             & Config_Name
+             & """: "
+             & TOML.Format_Error (Result);
       end if;
 
       Table := Result.Value;
 
       if Table.Kind /= TOML.TOML_Table then
-         Put_Line
-           (Standard_Error,
-            "invalid config file "
-            & Config_Name
-            & ": top-level value must be a table");
-         return;
+         raise Config_Error
+           with
+             "invalid config file """
+             & Config_Name
+             & """: top-level value must be a table";
       end if;
 
       declare
@@ -122,8 +122,19 @@ package body Lithophane is
 
          V := Field ("filter", TOML.TOML_String);
          if V.Is_Present then
-            Settings.filter :=
-              Lithophane.Filters_Choice'Value (TOML.As_String (V));
+            declare
+            begin
+               Settings.filter :=
+                 Lithophane.Filters_Choice'Value (TOML.As_String (V));
+            exception
+               when Constraint_Error =>
+                  Put_Line
+                    (Standard_Error,
+                     "invalid filter name in config file "
+                     & Config_Name
+                     & ": "
+                     & TOML.As_String (V));
+            end;
          end if;
 
          V := Field ("filter_size", TOML.TOML_Integer);

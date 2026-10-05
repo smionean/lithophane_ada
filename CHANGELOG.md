@@ -9,17 +9,20 @@
 - `-?` as another spelling of `-h`/`--help`.
 - The value of a long option may follow `=` or be the next argument
   (`--height=5`, `--height 5`).
+- Regression tests (`alr test`), in the `tests` crate.
 
 ### Changed
 - The command line is now parsed with AdaCL (`AdaCL.Command_Line.GetOpt`, new
   dependency `adacl_desktop`) instead of `GNAT.Command_Line`.
-- `--threshold` is renamed `--filter-threshold` and `--max_size` is renamed
-  `--max-size`; the old spellings are no longer accepted. The short forms
-  (`-t`, `-M`) and the config keys are unchanged.
-- An input file given on the command line replaces the `input-name` of a
-  config file instead of being ignored.
+- `--max_size` is renamed `--max-size`; the old spelling is no longer
+  accepted. The short form (`-M`) and the config key are unchanged.
+- The config file overrides the matching command line arguments wherever
+  `-c` stands, instead of only the ones before it. An input file may be given
+  on the command line when the config file has no `input-name`.
 - An invalid filter size, a malformed `--dimensions` value and a second input
   file are now errors instead of being ignored.
+- A config file that cannot be found or is not valid TOML is now an error
+  (non-zero exit status, nothing generated) instead of being skipped.
 - The help is written to standard output and lists AdaCL's trace options; a
   command line error prints a one-line message instead of the full help.
 

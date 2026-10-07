@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  test_support.ads
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Helpers shared by the regression tests: float comparison, a scratch
 --  directory for the files the tests generate, the golden files, the tiny
 --  picture used as input and a way to run the lithophane program.

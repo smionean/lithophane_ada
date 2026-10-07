@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  lithophane_tests.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Test driver: runs every regression test and reports the result. The
 --  exit status is a failure when a test fails.
 ------------------------------------------------------------------------------

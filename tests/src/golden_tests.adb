@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  golden_tests.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Compare the files the program writes for the test picture with the ones
 --  kept in tests/golden: any change in the output shows up here. When the
 --  change is intended, run the tests with LITHOPHANE_UPDATE_GOLDEN=1 to

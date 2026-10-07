@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  lithophane_main.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Program entry point. Drives the whole pipeline:
 --    * parse the command line (Lithophane.Commandline) and print help/version;
 --    * load the input image with GID into a raw 24-bit RGB bitmap;

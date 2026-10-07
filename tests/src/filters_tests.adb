@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  filters_tests.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Regression tests for Lithophane.Filters: the kernels, the convolution
 --  of one point and of a whole image, and the threshold.
 ------------------------------------------------------------------------------

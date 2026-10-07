@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  lithophane.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Root package body. Contains:
 --    * Parse_Config -- load the TOML file named by Settings.config and
 --      override the matching Settings fields (filter_threshold is a float

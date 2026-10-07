@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  lithophane-image_utilities.ads
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Specification of Lithophane.Image_Utilities: down-scale the input image
 --  before the mesh is built.
 --    * Calculate_New_Image_Size -- new width or height after shrinking both

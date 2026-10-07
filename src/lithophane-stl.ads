@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  lithophane-stl.ads
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Specification of Lithophane.STL: write a facet list to an STL file,
 --  either as text (Dump_STL_ASCII) or as the packed binary form
 --  (Dump_STL_BIN). STL carries no unit information; the geometry is emitted

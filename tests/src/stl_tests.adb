@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  stl_tests.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Regression tests for Lithophane.STL: layout of the binary and ASCII STL
 --  files.
 ------------------------------------------------------------------------------

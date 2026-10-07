@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  lithophane-stl.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Body of Lithophane.STL.
 --    * Dump_STL_ASCII writes the human-readable "solid / facet normal /
 --      outer loop / vertex" form to "<outfilename>.ascii.stl".

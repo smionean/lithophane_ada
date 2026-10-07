@@ -102,7 +102,7 @@ version = "1.2.0"
 authors = ["Simon Beàn"]
 maintainers = ["Simon Beàn <smionean@gmail.com>"]
 maintainers-logins = ["smionean"]
-licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+licenses = "MIT"
 website = "https://github.com/smionean/lithophane_ada"
 tags = ["3dprint", "lithophane", "lithography", "stl", "3mf"]
 

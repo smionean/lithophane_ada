@@ -1,3 +1,10 @@
+------------------------------------------------------------------------------
+--  image_utilities_tests.ads
+--
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+------------------------------------------------------------------------------
+
 with AUnit;
 with AUnit.Test_Cases;
 

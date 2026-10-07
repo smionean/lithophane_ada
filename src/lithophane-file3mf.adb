@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  lithophane-file3mf.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Body of Lithophane.File3mf. Contains:
 --    * vertex welding (coordinates quantised to a 1e-4 grid, hashed map) to
 --      turn the triangle "soup" into a closed manifold mesh;

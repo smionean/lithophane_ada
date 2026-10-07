@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  mesh_tests.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Regression tests for Lithophane.Calculate_Normal and
 --  Lithophane.Calculate_Facets: the height map must become a closed mesh
 --  whose relief culminates at Settings.height, on a base at Z = -2.

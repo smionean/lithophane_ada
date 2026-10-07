@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  lithophane-file3mf.ads
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Specification of Lithophane.File3mf: write the triangulated lithophane
 --  geometry to a 3MF file (an OPC/ZIP package written with the "stored"
 --  method, so no external compression library is needed). The mesh is a

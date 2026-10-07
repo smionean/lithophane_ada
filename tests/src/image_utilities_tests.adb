@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  image_utilities_tests.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Regression tests for Lithophane.Image_Utilities: the size of a shrunk
 --  image and its nearest-neighbour resampling.
 ------------------------------------------------------------------------------

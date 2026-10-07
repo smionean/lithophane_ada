@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  lithophane-image_utilities.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Body of Lithophane.Image_Utilities.
 --    * Calculate_New_Image_Size scales both sides by
 --      Settings.max_size / max(width, height), floors each, keeps a

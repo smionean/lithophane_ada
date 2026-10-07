@@ -5,7 +5,7 @@ version = "0.0.0"
 authors = ["Simon Beàn"]
 maintainers = ["Simon Beàn <smionean@gmail.com>"]
 maintainers-logins = ["smionean"]
-licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+licenses = "MIT"
 
 executables = ["lithophane_tests"]
 

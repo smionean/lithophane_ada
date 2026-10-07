@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  lithophane-filters.ads
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Specification of Lithophane.Filters: image pre-processing applied to the
 --  greyscale matrix (Matrix_Grey_Type, values 0.0 .. 1.0) before the mesh
 --  is built.

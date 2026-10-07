@@ -1,3 +1,10 @@
+------------------------------------------------------------------------------
+--  lithophane-commandline.ads
+--
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+------------------------------------------------------------------------------
+
 pragma Ada_2022;
 pragma Extensions_Allowed (On);
 

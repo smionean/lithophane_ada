@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  lithophane.ads
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Root package specification for the lithophane generator. Declares the
 --  shared vocabulary used across the whole program:
 --    * scalar types: Color_Type (0 .. 255), Grey_Type (0.0 .. 1.0);

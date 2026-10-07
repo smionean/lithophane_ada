@@ -1,3 +1,10 @@
+------------------------------------------------------------------------------
+--  lithophane_tests.gpr
+--
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+------------------------------------------------------------------------------
+
 with "aunit.gpr";
 
 --  Extends the lithophane project: its units are tested in-process, and

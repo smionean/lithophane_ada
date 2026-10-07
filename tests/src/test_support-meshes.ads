@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  test_support-meshes.ads
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Read back the meshes written by the program (binary STL, 3MF) and
 --  measure them: bounding box, open edges, degenerate triangles.
 ------------------------------------------------------------------------------

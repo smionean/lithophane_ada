@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  lithophane-filters.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Body of Lithophane.Filters. The Bartlett, Gauss and Square builders
 --  currently return all-zero (identity) kernels; only Sharpen carries real
 --  weights (-1 everywhere, centre chosen so the weights sum to 1).

@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  command_line_tests.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Regression tests for the lithophane program as a whole: every option of
 --  the command line, in each of its spellings, the files it writes and the
 --  errors it reports.

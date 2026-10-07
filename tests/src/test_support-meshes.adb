@@ -1,5 +1,8 @@
 ------------------------------------------------------------------------------
 --  test_support-meshes.adb
+--
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
 ------------------------------------------------------------------------------
 
 with Ada.Containers.Indefinite_Hashed_Maps;

@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  file3mf_tests.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Regression tests for Lithophane.File3mf: the 3MF file must be a valid
 --  ZIP/OPC package holding a welded, closed mesh, scaled to the requested
 --  size in millimetres.

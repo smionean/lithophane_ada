@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  config_tests.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Regression tests for Lithophane.Parse_Config: the keys of the TOML file
 --  override the settings, a missing or invalid key keeps its value, a
 --  file that cannot be loaded is an error.

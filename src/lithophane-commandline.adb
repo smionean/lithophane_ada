@@ -1,6 +1,9 @@
 ------------------------------------------------------------------------------
 --  lithophane-commandline.adb
 --
+--  Copyright (c) 2026 Simon Beàn
+--  SPDX-License-Identifier: MIT
+--
 --  Command line parser built on AdaCL.Command_Line.GetOpt. Every option has
 --  a short form (-H 5, -H5) and a GNU long form; the value of a long option
 --  may be attached with '=' (--height=5) or given as the next argument

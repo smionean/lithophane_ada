@@ -17,7 +17,11 @@
 --    * shrink the height map so its larger side fits Settings.max_size;
 --    * build the mesh via Lithophane.Calculate_Facets (relief scaled by
 --      Settings.height, set with -H/--height) and write it out as
---      binary STL, ASCII STL and/or 3MF.
+--      binary STL, ASCII STL and/or 3MF;
+--    * or, with -C/--colour, keep the colours of the picture as cyan,
+--      magenta and yellow maps next to the height map (then its black
+--      component) and write the colour lithophane, a 3MF file made of one
+--      part per filament (Lithophane.Colour).
 --
 --  Created : 2026-08-23
 --  Author  : Simon Beàn
@@ -38,11 +42,13 @@ with AdaCL.Command_Line.GetOpt;
 with Interfaces;
 
 with Lithophane;                 use Lithophane;
+with Lithophane.Colour;          use Lithophane.Colour;
 with Lithophane.Commandline;
 with Lithophane.STL;             use Lithophane.STL;
 with Lithophane.File3mf;         use Lithophane.File3mf;
 with Lithophane.Filters;         use Lithophane.Filters;
 with Lithophane.Image_Utilities; use Lithophane.Image_Utilities;
+with Lithophane.Interaction;     use Lithophane.Interaction;
 
 procedure Lithophane_Main is
 
@@ -262,26 +268,35 @@ procedure Lithophane_Main is
    --
    --  Generate_Lithophane
    --   @param the_image the greyscale image to convert into a lithophane
+   --   @param Inks the cyan, magenta and yellow maps of the picture (only
+   --          read for a colour lithophane)
    --   @param Settings the settings for the lithophane generation
    --
    procedure Generate_Lithophane
-     (the_image : Matrix_Grey_Access; Settings : Settings_Record)
+     (the_image : Matrix_Grey_Access;
+      Inks      : Ink_Maps;
+      Settings  : Settings_Record)
    is
       Facets_List : Facets.Vector;
    begin
       Process_Image (the_image, Settings);
-      Facets_List := Calculate_Facets (the_image, Settings);
 
-      if Settings.save_as_ascii then
-         Dump_STL_ASCII (Facets_List, Settings);
-      end if;
+      if Settings.colour then
+         Dump_Colour_3mf (the_image, Inks, Settings);
+      else
+         Facets_List := Calculate_Facets (the_image, Settings);
 
-      if Settings.save_as_binary then
-         Dump_STL_BIN (Facets_List, Settings);
-      end if;
+         if Settings.save_as_ascii then
+            Dump_STL_ASCII (Facets_List, Settings);
+         end if;
 
-      if Settings.save_as_3mf then
-         Dump_3mf (Facets_List, Settings);
+         if Settings.save_as_binary then
+            Dump_STL_BIN (Facets_List, Settings);
+         end if;
+
+         if Settings.save_as_3mf then
+            Dump_3mf (Facets_List, Settings);
+         end if;
       end if;
 
       if Settings.save_pgm then
@@ -345,6 +360,11 @@ procedure Lithophane_Main is
            new Matrix_Grey_Type
                  (1 .. GID.Pixel_Width (img_descrp) + 2 * Settings.border,
                   1 .. GID.Pixel_Height (img_descrp) + 2 * Settings.border);
+
+         --  The inks of a colour lithophane; the border holds none, it
+         --  stays white.
+         matinks : Ink_Maps;
+         inks    : Ink_Values;
       begin
          Put_Line ("IMGBUF " & img_buf'First'Img);
          for i in matgrey'Range (1) loop
@@ -352,6 +372,14 @@ procedure Lithophane_Main is
                matgrey (i, j) := 1.0;
             end loop;
          end loop;
+
+         if Settings.colour then
+            for map of matinks loop
+               map :=
+                 new Matrix_Grey_Type'
+                   (matgrey'Range (1) => [matgrey'Range (2) => 0.0]);
+            end loop;
+         end if;
 
          while x <= img_buf'Last loop
             rouge := Color_Type (img_buf (x));
@@ -367,12 +395,22 @@ procedure Lithophane_Main is
 
                end if;
             end if;
-            grey :=
-              Grey_Type
-                (1.0
-                 - (0.2989 * Float (rouge) + 0.5870 * Float (vert)
-                    + 0.1140 * Float (bleu))
-                   / 255.0);
+            if Settings.colour then
+               --  The height map is the black of the pixel, what is left
+               --  of its colour goes to the inks.
+               To_CMYK (rouge, vert, bleu, inks, grey);
+               for ink in matinks'Range loop
+                  matinks (ink) (c + Settings.border, l + Settings.border) :=
+                    inks (ink);
+               end loop;
+            else
+               grey :=
+                 Grey_Type
+                   (1.0
+                    - (0.2989 * Float (rouge) + 0.5870 * Float (vert)
+                       + 0.1140 * Float (bleu))
+                      / 255.0);
+            end if;
             --  Put_Line ("GREY " & grey'Img);
             matgrey (c + Settings.border, l + Settings.border) := grey;
             x := x + 1;
@@ -411,10 +449,15 @@ procedure Lithophane_Main is
                resized    : constant Matrix_Grey_Access :=
                  Resize_Image (matgrey, new_width, new_height);
             begin
-               Generate_Lithophane (resized, Settings);
+               if Settings.colour then
+                  for map of matinks loop
+                     map := Resize_Image (map, new_width, new_height);
+                  end loop;
+               end if;
+               Generate_Lithophane (resized, matinks, Settings);
             end;
          else
-            Generate_Lithophane (matgrey, Settings);
+            Generate_Lithophane (matgrey, matinks, Settings);
          end if;
       end;
 
@@ -501,13 +544,25 @@ begin
       return;
    end if;
 
-   Settings := Options.To_Settings;
+   if Options.Is_Interactive then
+      Show_Interaction (Settings);
+   else
+      Settings := Options.To_Settings;
+   end if;
 
    if Ada.Strings.Unbounded.Length (Settings.filename) = 0 then
       Put_Line (Standard_Error, "Error: no input image file given.");
       Put_Line (Standard_Error, "Try 'lithophane --help'.");
       Set_Exit_Status (Failure);
       return;
+   end if;
+
+   --  A colour lithophane is made of several parts, which only a 3MF file
+   --  can hold: it replaces every other mesh output.
+   if Settings.colour then
+      Settings.save_as_3mf := True;
+      Settings.save_as_binary := False;
+      Settings.save_as_ascii := False;
    end if;
 
    --  In the 3MF output a requested depth fixes the total thickness, so an
@@ -519,7 +574,11 @@ begin
       Put_Line
         (Standard_Error,
          "Warning: the depth given in --dimensions overrides --height in"
-         & " the 3MF output: the total thickness (base + relief) is"
+         & " the 3MF output: the "
+         & (if Settings.colour
+            then "thickness of the white part"
+            else "total thickness")
+         & " (base + relief) is"
          & Settings.dimensions.depth'Img
          & " mm");
    end if;
@@ -540,7 +599,11 @@ exception
       Put_Line (Standard_Error, "Try 'lithophane --help'.");
       Set_Exit_Status (Failure);
 
-   when E : Config_Error =>
+   when Interaction_Cancelled =>
+      Put_Line ("Exiting program");
+      Set_Exit_Status (Failure);
+
+   when E : Config_Error | Interaction_Error =>
       Put_Line (Standard_Error, "Error: " & Exception_Message (E));
       Set_Exit_Status (Failure);
 

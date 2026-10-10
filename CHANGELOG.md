@@ -1,5 +1,23 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- `-C`/`--colour` option (and `colour` config key): colour lithophane, written
+  as a 3MF file only. The file holds one object made of a white sheet (`0.2`
+  mm, the first layers on the bed), then a cyan, a magenta and a yellow layer (each as thick as the picture holds of that ink, `0.4` mm at
+  most) under the white lithophane, one part per filament, each with its name
+  and display colour, and with its filament for Bambu Studio (1 cyan,
+  2 magenta, 3 yellow, 4 white). The relief then follows the black of the picture
+  (`1 - max(R, G, B)`), and a depth in `--dimensions` is the thickness of the
+  white part.
+- `-i`/`--interactive` option: the settings are asked for one by one on the
+  standard input (input file, threshold, filter, border, colour mode, file
+  type, standard or custom dimensions, maximum image dimension and output
+  name) instead of being read from the command line, whose other options are
+  then ignored. Answering `0` to a menu leaves the program; an invalid answer
+  or the end of the input is an error. Nothing is generated in either case.
+
 ## [1.2.0] - 2026-10-04
 
 ### Added

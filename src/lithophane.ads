@@ -10,7 +10,7 @@
 --    * Dimensions_Type, the optional target physical size in millimetres;
 --    * Settings_Record, holding every run option (filter, filter size and
 --      threshold, border, relief height, output formats, maximum image
---      size, file names, config path, dimensions);
+--      size, file names, config path, dimensions, colour mode);
 --    * geometry types Vector / Point / Facet and the Facets vector;
 --    * the height map container Matrix_Grey_Type (normalised greys,
 --      0.0 .. 1.0) and its access type, and Matrix_Filter_Type for
@@ -63,6 +63,9 @@ package Lithophane is
       save_as_ascii    : Boolean := False;
       save_as_3mf      : Boolean := False;
       save_pgm         : Boolean := False;
+      colour           : Boolean := False;
+      --  write a colour lithophane (cyan, magenta, yellow and white parts
+      --  in one 3MF file) instead of the STL / 3MF relief
       dimensions       : Dimensions_Type := (others => 0.0);
       max_size         : Natural :=
         1_500;   --  maximum image dimension (0 = no limit)
@@ -71,6 +74,9 @@ package Lithophane is
         Ada.Strings.Unbounded.To_Unbounded_String ("test");
       config           : Ada.Strings.Unbounded.Unbounded_String;
    end record;
+
+   --  Thickness of the flat base under the relief: it spans Z = -2.0 .. 0.0.
+   Base_Thickness : constant Float := 2.0;
 
    type Vector is record
       vx : Float := 0.0;

@@ -9,5 +9,6 @@ save-ascii = false
 save-binary = true
 save-3mf = false
 save-pgm = true
+colour = false
 dimensions = {height=100.0, width=100.0, depth=1.5}
 max_size = 1500

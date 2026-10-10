@@ -55,6 +55,11 @@ package Test_Support is
    Picture_Height : constant := 3;
    procedure Write_Picture (Path : String);
 
+   --  A picture of the same size in colours: red, green, blue and yellow
+   --  on the top row, a darker orange, a grey, white and black on the
+   --  middle one, and a cyan bottom row.
+   procedure Write_Colour_Picture (Path : String);
+
    --  A Width x Height matrix, indexed from 1, filled with Grey.
    function Flat_Matrix
      (Width : Positive; Height : Positive; Grey : Grey_Type)
@@ -77,6 +82,11 @@ package Test_Support is
    --  and, when Merge_Stderr is set, on standard error.
    function Run
      (Arguments : String; Merge_Stderr : Boolean := True) return Run_Result;
+
+   --  Same as Run, the program reading Input on its standard input, which
+   --  ends there. Output holds both its standard output and standard error.
+   function Run_With_Input
+     (Arguments : String; Input : String) return Run_Result;
 
    function Printed (Result : Run_Result; Pattern : String) return Boolean;
 

@@ -26,7 +26,7 @@ with Ada.Numerics.Elementary_Functions; use Ada.Numerics.Elementary_Functions;
 
 package body Lithophane is
 
-   Z : constant Float := -2.0;
+   Z : constant Float := -Base_Thickness;
 
    procedure Print_Matrix
      (the_matrix : Matrix_Grey_Access;
@@ -121,6 +121,11 @@ package body Lithophane is
          V := Field ("save-pgm", TOML.TOML_Boolean);
          if V.Is_Present then
             Settings.save_pgm := TOML.As_Boolean (V);
+         end if;
+
+         V := Field ("colour", TOML.TOML_Boolean);
+         if V.Is_Present then
+            Settings.colour := TOML.As_Boolean (V);
          end if;
 
          V := Field ("filter", TOML.TOML_String);

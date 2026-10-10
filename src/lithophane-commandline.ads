@@ -40,6 +40,10 @@ package Lithophane.Commandline is
    --  True once -v or --version has been seen: Parse has stopped there.
    function Is_Version_Requested (This : Object) return Boolean;
 
+   --  True once -i or --interactive has been seen: the settings are then
+   --  asked for on the standard input instead of taken from To_Settings.
+   function Is_Interactive (This : Object) return Boolean;
+
    --  The options gathered by Parse, as the record used by the rest of the
    --  program.
    function To_Settings (This : Object) return Settings_Record;
@@ -76,6 +80,9 @@ private
    Save_PGM_Long  : constant Wide_Wide_String := "save-pgm";
    Save_PGM_Short : constant Wide_Wide_Character := 'p';
 
+   Colour_Long  : constant Wide_Wide_String := "colour";
+   Colour_Short : constant Wide_Wide_Character := 'C';
+
    Dimensions_Long  : constant Wide_Wide_String := "dimensions";
    Dimensions_Short : constant Wide_Wide_Character := 'd';
 
@@ -87,6 +94,9 @@ private
 
    Config_Long  : constant Wide_Wide_String := "config";
    Config_Short : constant Wide_Wide_Character := 'c';
+
+   Interaction_Long  : constant Wide_Wide_String := "interactive";
+   Interaction_Short : constant Wide_Wide_Character := 'i';
 
    Version_Long  : constant Wide_Wide_String := "version";
    Version_Short : constant Wide_Wide_Character := 'v';
@@ -107,6 +117,7 @@ private
       Save_As_ASCII     : Boolean := False;
       Save_As_3MF       : Boolean := False;
       Save_PGM          : Boolean := False;
+      Colour            : Boolean := False;
       Dimensions        : Dimensions_Type := (others => 0.0);
       Max_Size          : Natural :=
         1_500;   --  maximum image dimension (0 = no limit)
@@ -119,6 +130,7 @@ private
         Ada.Strings.Unbounded.To_Unbounded_String ("test");
       Config            : Ada.Strings.Unbounded.Unbounded_String :=
         Ada.Strings.Unbounded.Null_Unbounded_String;
+      Interaction       : Boolean := False;
    end record;
 
 end Lithophane.Commandline;

@@ -16,12 +16,14 @@ with AUnit.Run;
 with AUnit.Test_Cases;
 with AUnit.Test_Suites;
 
+with Colour_Tests;
 with Command_Line_Tests;
 with Config_Tests;
 with File3mf_Tests;
 with Filters_Tests;
 with Golden_Tests;
 with Image_Utilities_Tests;
+with Interactive_Tests;
 with Mesh_Tests;
 with STL_Tests;
 
@@ -40,8 +42,10 @@ procedure Lithophane_Tests is
       Result.Add_Test (Test_Case_Access'(new Mesh_Tests.Test));
       Result.Add_Test (Test_Case_Access'(new STL_Tests.Test));
       Result.Add_Test (Test_Case_Access'(new File3mf_Tests.Test));
+      Result.Add_Test (Test_Case_Access'(new Colour_Tests.Test));
       Result.Add_Test (Test_Case_Access'(new Config_Tests.Test));
       Result.Add_Test (Test_Case_Access'(new Command_Line_Tests.Test));
+      Result.Add_Test (Test_Case_Access'(new Interactive_Tests.Test));
       Result.Add_Test (Test_Case_Access'(new Golden_Tests.Test));
       return Result;
    end Suite;

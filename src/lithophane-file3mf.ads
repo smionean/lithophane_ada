@@ -8,11 +8,15 @@
 --  geometry to a 3MF file (an OPC/ZIP package written with the "stored"
 --  method, so no external compression library is needed). The mesh is a
 --  closed solid (coincident vertices are welded) and can be scaled to a
---  requested physical size in millimetres.
+--  requested physical size in millimetres. A model may also be made of
+--  several such solids, each with its own name and colour (colour
+--  lithophane: one part per filament).
 --
 --  Created : 2026-09-02
 --  Author  : Simon Beàn & Claude Code
 ------------------------------------------------------------------------------
+
+with Ada.Strings.Unbounded;
 
 package Lithophane.File3mf is
 
@@ -37,5 +41,30 @@ package Lithophane.File3mf is
    --  3MF is declared in millimetres.
    procedure Dump_3mf
      (Facets_List : Facets.Vector; Settings : Settings_Record);
+
+   --  One solid of a model made of several parts.
+   subtype Colour_Code is String (1 .. 7);   --  sRGB, as "#RRGGBB"
+
+   type Model_Part is record
+      Name     : Ada.Strings.Unbounded.Unbounded_String;
+      Colour   : Colour_Code := "#FFFFFF";
+      Filament : Positive := 1;   --  the filament it is printed with
+      Mesh     : aliased Facets.Vector;
+   end record;
+
+   type Model_Parts is array (Positive range <>) of Model_Part;
+
+   --  Same as above for a model made of several solids, e.g. one per
+   --  filament of a multi-material print. Each part with a non-empty mesh
+   --  becomes a named mesh object bound to its colour (a <m:colorgroup> of
+   --  the 3MF materials extension); the build item is one object assembling
+   --  them as components, so a slicer loads a single object made of several
+   --  parts. The parts are welded separately and share one scale, computed
+   --  from the bounding box of the whole model, so they stay in register.
+   --
+   --  The package also holds Metadata/model_settings.config, which Bambu
+   --  Studio and the slicers derived from it read: it gives each part its
+   --  Filament.
+   procedure Dump_3mf (Parts : Model_Parts; Settings : Settings_Record);
 
 end Lithophane.File3mf;

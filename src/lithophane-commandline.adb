@@ -48,6 +48,7 @@ package body Lithophane.Commandline is
      & Save_As_STL_ASCII_Short
      & Save_As_3MF_Short
      & Save_PGM_Short
+     & Colour_Short
      & Border_Short
      & Inherited.Option_Argument
      & Height_Short
@@ -63,7 +64,8 @@ package body Lithophane.Commandline is
      & Outfilename_Short
      & Inherited.Option_Argument
      & Config_Short
-     & Inherited.Option_Argument;
+     & Inherited.Option_Argument
+     & Interaction_Short;
 
    --  Long options handled by AdaCL.Trace itself start with this prefix.
    Trace_Prefix : constant Wide_Wide_String := "TRACE";
@@ -189,6 +191,9 @@ package body Lithophane.Commandline is
    function Is_Version_Requested (This : Object) return Boolean
    is (This.Version_Requested);
 
+   function Is_Interactive (This : Object) return Boolean
+   is (This.Interaction);
+
    function To_Settings (This : Object) return Settings_Record
    is (border           => This.Border,
        height           => This.Height,
@@ -200,6 +205,7 @@ package body Lithophane.Commandline is
        save_as_ascii    => This.Save_As_ASCII,
        save_as_3mf      => This.Save_As_3MF,
        save_pgm         => This.Save_PGM,
+       colour           => This.Colour,
        dimensions       => This.Dimensions,
        max_size         => This.Max_Size,
        filename         => This.Filename,
@@ -223,6 +229,7 @@ package body Lithophane.Commandline is
       This.Save_As_ASCII := Settings.save_as_ascii;
       This.Save_As_3MF := Settings.save_as_3mf;
       This.Save_PGM := Settings.save_pgm;
+      This.Colour := Settings.colour;
       This.Dimensions := Settings.dimensions;
       This.Max_Size := Settings.max_size;
       This.Filename := Settings.filename;
@@ -422,6 +429,11 @@ package body Lithophane.Commandline is
          Save_PGM_Long,
          "write the greyscale image as <name>.pgm");
       Put_Help_Line
+        (Colour_Short,
+         Colour_Long,
+         "write a colour lithophane (cyan, magenta, yellow and white"
+         & " parts) as <name>.3mf; no STL is written");
+      Put_Help_Line
         (Outfilename_Short,
          Outfilename_Long,
          "name",
@@ -464,6 +476,11 @@ package body Lithophane.Commandline is
          Config_Long,
          "file",
          "read options from a TOML file; it overrides the command line");
+      Put_Help_Line
+        (Interaction_Short,
+         Interaction_Long,
+         "ask for the settings one by one instead of reading them from"
+         & " the command line; the other options are ignored");
       New_Line;
    end Write_Help;
 
@@ -484,6 +501,10 @@ package body Lithophane.Commandline is
          This.Save_As_3MF := True;
       elsif Option = Save_PGM_Short then
          This.Save_PGM := True;
+      elsif Option = Colour_Short then
+         This.Colour := True;
+      elsif Option = Interaction_Short then
+         This.Interaction := True;
       else
          --  -? is the help switch built in AdaCL.
          Inherited.Analyze_Without_Argument (Inherited.Object (This));
@@ -542,6 +563,10 @@ package body Lithophane.Commandline is
          This.Save_As_3MF := True;
       elsif Name = Save_PGM_Long then
          This.Save_PGM := True;
+      elsif Name = Colour_Long then
+         This.Colour := True;
+      elsif Name = Interaction_Long then
+         This.Interaction := True;
       elsif Starts_With (Name, Trace_Prefix) then
          Inherited.Analyze_GNU (Inherited.Object (This));
       else

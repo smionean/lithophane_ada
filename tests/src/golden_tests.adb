@@ -62,6 +62,17 @@ package body Golden_Tests is
         (Scratch ("sharpened.pgm"), "sharpened.pgm", Is_Text => True);
    end Sharpened_And_Scaled;
 
+   procedure Colour (T : in out Test_Case) is
+      pragma Unreferenced (T);
+   begin
+      Write_Colour_Picture (Scratch (Picture));
+      Generate ("-C -p -B 1 -t 0 -H 3 -d 30x0x2 -o colour");
+      Assert_Matches_Golden
+        (Scratch ("colour.3mf"), "colour.3mf", Is_Text => False);
+      Assert_Matches_Golden
+        (Scratch ("colour.pgm"), "colour.pgm", Is_Text => True);
+   end Colour;
+
    overriding
    procedure Register_Tests (T : in out Test) is
       use AUnit.Test_Cases.Registration;
@@ -69,6 +80,7 @@ package body Golden_Tests is
       Register_Routine (T, Relief'Access, "plain relief");
       Register_Routine
         (T, Sharpened_And_Scaled'Access, "sharpened picture, scaled 3MF");
+      Register_Routine (T, Colour'Access, "colour lithophane");
    end Register_Tests;
 
 end Golden_Tests;

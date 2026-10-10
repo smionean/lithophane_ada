@@ -8,8 +8,10 @@
 --    * vertex welding (coordinates quantised to a 1e-4 grid, hashed map) to
 --      turn the triangle "soup" into a closed manifold mesh;
 --    * optional scaling of the mesh to a physical size in millimetres;
---    * generation of the 3D/3dmodel.model XML, [Content_Types].xml and
---      _rels/.rels parts;
+--    * generation of the 3D/3dmodel.model XML (one mesh object, or several
+--      named and coloured ones assembled as components), [Content_Types].xml
+--      and _rels/.rels parts, plus, for a coloured model, the settings
+--      giving a filament to each part in Bambu Studio;
 --    * assembly of the OPC/ZIP archive with the "stored" (uncompressed)
 --      method, CRC-32 computed directly, then writing the .3mf file.
 --
@@ -147,15 +149,36 @@ package body Lithophane.File3mf is
    end Put_Str;
 
    --  ---------------------------------------------------------------------
-   --  Dump_3mf
+   --  Write_3mf: the writer behind both Dump_3mf. The meshes are referenced,
+   --  not copied: a facet list is by far the largest object of the program.
    --  ---------------------------------------------------------------------
-   procedure Dump_3mf (Facets_List : Facets.Vector; Settings : Settings_Record)
+   type Facets_Ref is access constant Facets.Vector;
+
+   type Part_Ref is record
+      Name     : Unbounded_String;
+      Colour   : Colour_Code := "#FFFFFF";
+      Filament : Positive := 1;
+      Mesh     : Facets_Ref;
+   end record;
+
+   type Part_Refs is array (Positive range <>) of Part_Ref;
+
+   --  With Coloured unset there is a single part, written as a bare mesh
+   --  object; otherwise every non-empty part gets a name and a material,
+   --  and the parts are assembled into one object.
+   procedure Write_3mf
+     (Sources : Part_Refs; Coloured : Boolean; Settings : Settings_Record)
    is
       --  Fixed DOS timestamp (1980-01-01 00:00:00); a 3MF reader ignores it.
       DOS_Time : constant Unsigned_16 := 0;
       DOS_Date : constant Unsigned_16 := 16#0021#;
 
       Model_Path : constant String := "3D/3dmodel.model";
+
+      --  Read by Bambu Studio (and the slicers derived from it), whoever
+      --  wrote the 3MF file: the filament of every part of an object.
+      Slicer_Settings_Path : constant String :=
+        "Metadata/model_settings.config";
 
       --  Filled in by Weld_Mesh, used only for the progress line.
       Welded_Vertices     : Natural := 0;
@@ -167,10 +190,17 @@ package body Lithophane.File3mf is
          return Trim (X'Image, Both);
       end Num;
 
-      --  Welded geometry (output/millimetre space). Built once by Weld_Mesh,
-      --  then read (not modified) by Emit_Model on every streaming pass.
-      Verts : Point_Vectors.Vector;
-      Tris  : Tri_Vectors.Vector;
+      --  Welded geometry (output/millimetre space) of each part. Built once
+      --  by Weld_Mesh, then read (not modified) by Emit_Model on every
+      --  streaming pass.
+      type Welded_Mesh is record
+         Verts : Point_Vectors.Vector;
+         Tris  : Tri_Vectors.Vector;
+      end record;
+
+      Meshes : array (Sources'Range) of Welded_Mesh;
+
+      Source_Facets : Natural := 0;
 
       D : Dimensions_Type renames Settings.dimensions;
 
@@ -203,43 +233,26 @@ package body Lithophane.File3mf is
             pz => (P.pz - Min_Z) * Sz);
       end To_MM;
 
-      --  Turn the facet soup into welded vertices + triangle index triples.
+      --  Turn the facet soups into welded vertices + triangle index triples.
       --  Runs three linear passes: bounding box, per-axis scale, then weld.
       --  Coincident corners (quantised to Weld_Grid) collapse onto one id;
       --  triangles that degenerate to a line or point once welded are
-      --  dropped, so the slicer sees a closed manifold.
+      --  dropped, so the slicer sees a closed manifold. Each part is welded
+      --  on its own: two parts never share a vertex.
       procedure Weld_Mesh is
-         Map     : Vertex_Maps.Map;
-         Next_Id : Natural := 0;
-
-         function Vertex_Index (P : Point) return Natural is
-            K : constant Vertex_Key := To_Key (P);
-            C : constant Vertex_Maps.Cursor := Map.Find (K);
-         begin
-            if Vertex_Maps.Has_Element (C) then
-               return Vertex_Maps.Element (C);
-            end if;
-
-            declare
-               Id : constant Natural := Next_Id;
-            begin
-               Map.Insert (K, Id);
-               Verts.Append (P);
-               Next_Id := Next_Id + 1;
-               return Id;
-            end;
-         end Vertex_Index;
-
       begin
          --  Pass 1: measure the model.
-         for I in Facets_List.First_Index .. Facets_List.Last_Index loop
-            declare
-               F : constant Facet := Facets_List.Element (I);
-            begin
-               Grow (F.Vertex_A);
-               Grow (F.Vertex_B);
-               Grow (F.Vertex_C);
-            end;
+         for Source of Sources loop
+            for I in Source.Mesh.First_Index .. Source.Mesh.Last_Index loop
+               declare
+                  F : constant Facet := Source.Mesh.Element (I);
+               begin
+                  Grow (F.Vertex_A);
+                  Grow (F.Vertex_B);
+                  Grow (F.Vertex_C);
+               end;
+            end loop;
+            Source_Facets := Source_Facets + Natural (Source.Mesh.Length);
          end loop;
 
          --  Pass 2: derive the per-axis scale. An axis with a requested
@@ -271,84 +284,275 @@ package body Lithophane.File3mf is
          end;
 
          --  Pass 3: weld and record the surviving triangles.
-         for I in Facets_List.First_Index .. Facets_List.Last_Index loop
+         for N in Sources'Range loop
             declare
-               F  : constant Facet := Facets_List.Element (I);
-               A  : constant Natural := Vertex_Index (To_MM (F.Vertex_A));
-               B  : constant Natural := Vertex_Index (To_MM (F.Vertex_B));
-               Cc : constant Natural := Vertex_Index (To_MM (F.Vertex_C));
+               Facets_List : Facets.Vector renames Sources (N).Mesh.all;
+               Verts       : Point_Vectors.Vector renames Meshes (N).Verts;
+               Tris        : Tri_Vectors.Vector renames Meshes (N).Tris;
+
+               Map     : Vertex_Maps.Map;
+               Next_Id : Natural := 0;
+
+               function Vertex_Index (P : Point) return Natural is
+                  K : constant Vertex_Key := To_Key (P);
+                  C : constant Vertex_Maps.Cursor := Map.Find (K);
+               begin
+                  if Vertex_Maps.Has_Element (C) then
+                     return Vertex_Maps.Element (C);
+                  end if;
+
+                  declare
+                     Id : constant Natural := Next_Id;
+                  begin
+                     Map.Insert (K, Id);
+                     Verts.Append (P);
+                     Next_Id := Next_Id + 1;
+                     return Id;
+                  end;
+               end Vertex_Index;
             begin
-               if A /= B and then B /= Cc and then A /= Cc then
-                  Tris.Append (Tri_Indices'(A, B, Cc));
-               end if;
+               for I in Facets_List.First_Index .. Facets_List.Last_Index loop
+                  declare
+                     F  : constant Facet := Facets_List.Element (I);
+                     A  : constant Natural :=
+                       Vertex_Index (To_MM (F.Vertex_A));
+                     B  : constant Natural :=
+                       Vertex_Index (To_MM (F.Vertex_B));
+                     Cc : constant Natural :=
+                       Vertex_Index (To_MM (F.Vertex_C));
+                  begin
+                     if A /= B and then B /= Cc and then A /= Cc then
+                        Tris.Append (Tri_Indices'(A, B, Cc));
+                     end if;
+                  end;
+               end loop;
+
+               Welded_Vertices := Welded_Vertices + Next_Id;
+               Welded_Triangles := Welded_Triangles + Natural (Tris.Length);
+               --  Map is no longer needed; its storage is released here.
             end;
          end loop;
-
-         Welded_Vertices := Next_Id;
-         Welded_Triangles := Natural (Tris.Length);
-         --  Map is no longer needed; its storage is released on return.
       end Weld_Mesh;
+
+      function Id (N : Natural) return String
+      is (Trim (Natural'Image (N), Both));
+
+      --  Text as the value of an XML attribute.
+      function Escaped (Text : Unbounded_String) return String is
+         Result : Unbounded_String;
+      begin
+         for C of To_String (Text) loop
+            case C is
+               when '&'    =>
+                  Append (Result, "&amp;");
+
+               when '<'    =>
+                  Append (Result, "&lt;");
+
+               when '>'    =>
+                  Append (Result, "&gt;");
+
+               when '"'    =>
+                  Append (Result, "&quot;");
+
+               when others =>
+                  Append (Result, C);
+            end case;
+         end loop;
+         return To_String (Result);
+      end Escaped;
+
+      --  Resource ids of a coloured model: 1 is the group of colours,
+      --  then come the parts and, last, the object assembling them. A
+      --  part without any triangle is left out (a mesh may not be empty).
+      Materials_Id : constant := 1;
 
       --  Emit the whole 3D/3dmodel.model XML as a sequence of small chunks
       --  passed to Sink. Called twice: once with a counting/checksumming
       --  sink to fill in the ZIP header, once with a sink that writes to
-      --  the archive stream. It only reads Verts and Tris, never mutates.
+      --  the archive stream. It only reads Meshes, never mutates.
       procedure Emit_Model (Sink : access procedure (Chunk : String)) is
+
+         procedure Emit_Mesh (Mesh : Welded_Mesh) is
+            Verts : Point_Vectors.Vector renames Mesh.Verts;
+            Tris  : Tri_Vectors.Vector renames Mesh.Tris;
+         begin
+            Sink ("   <mesh>" & LF);
+
+            Sink ("    <vertices>" & LF);
+            for I in Verts.First_Index .. Verts.Last_Index loop
+               declare
+                  P : constant Point := Verts.Element (I);
+               begin
+                  Sink
+                    ("     <vertex x="""
+                     & Num (P.px)
+                     & """ y="""
+                     & Num (P.py)
+                     & """ z="""
+                     & Num (P.pz)
+                     & """/>"
+                     & LF);
+               end;
+            end loop;
+            Sink ("    </vertices>" & LF);
+
+            Sink ("    <triangles>" & LF);
+            for I in Tris.First_Index .. Tris.Last_Index loop
+               declare
+                  T : constant Tri_Indices := Tris.Element (I);
+               begin
+                  Sink
+                    ("     <triangle v1="""
+                     & Id (T.A)
+                     & """ v2="""
+                     & Id (T.B)
+                     & """ v3="""
+                     & Id (T.C)
+                     & """/>"
+                     & LF);
+               end;
+            end loop;
+            Sink ("    </triangles>" & LF);
+
+            Sink ("   </mesh>" & LF);
+         end Emit_Mesh;
+
+         Next_Object  : Natural := Materials_Id + 1;
+         Material     : Natural := 0;
+
       begin
          Sink ("<?xml version=""1.0"" encoding=""UTF-8""?>" & LF);
          Sink
            ("<model unit=""millimeter"" xml:lang=""en-US"""
             & " xmlns=""http://schemas.microsoft.com/3dmanufacturing/"
-            & "core/2015/02"">"
+            & "core/2015/02"""
+            & (if Coloured
+               then
+                 " xmlns:m=""http://schemas.microsoft.com/"
+                 & "3dmanufacturing/material/2015/02"""
+               else "")
+            & ">"
             & LF);
          Sink (" <resources>" & LF);
-         Sink ("  <object id=""1"" type=""model"">" & LF);
-         Sink ("   <mesh>" & LF);
 
-         Sink ("    <vertices>" & LF);
-         for I in Verts.First_Index .. Verts.Last_Index loop
-            declare
-               P : constant Point := Verts.Element (I);
-            begin
+         if not Coloured then
+            Sink ("  <object id=""1"" type=""model"">" & LF);
+            Emit_Mesh (Meshes (Meshes'First));
+            Sink ("  </object>" & LF);
+            Sink (" </resources>" & LF);
+            Sink (" <build>" & LF);
+            Sink ("  <item objectid=""1""/>" & LF);
+
+         else
+            --  A colour group of the materials extension rather than core
+            --  base materials: it is the one Bambu Studio reads the colours
+            --  of a 3MF file from. The prefix has to be "m" for it.
+            Sink ("  <m:colorgroup id=""" & Id (Materials_Id) & """>" & LF);
+            for N in Sources'Range loop
+               if not Meshes (N).Tris.Is_Empty then
+                  Sink
+                    ("   <m:color color="""
+                     & Sources (N).Colour
+                     & "FF""/>"
+                     & LF);
+               end if;
+            end loop;
+            Sink ("  </m:colorgroup>" & LF);
+
+            for N in Sources'Range loop
+               if not Meshes (N).Tris.Is_Empty then
+                  Sink
+                    ("  <object id="""
+                     & Id (Next_Object)
+                     & """ name="""
+                     & Escaped (Sources (N).Name)
+                     & """ type=""model"" pid="""
+                     & Id (Materials_Id)
+                     & """ pindex="""
+                     & Id (Material)
+                     & """>"
+                     & LF);
+                  Emit_Mesh (Meshes (N));
+                  Sink ("  </object>" & LF);
+                  Next_Object := Next_Object + 1;
+                  Material := Material + 1;
+               end if;
+            end loop;
+
+            Sink
+              ("  <object id="""
+               & Id (Next_Object)
+               & """ type=""model"">"
+               & LF);
+            Sink ("   <components>" & LF);
+            for Part_Id in Materials_Id + 1 .. Next_Object - 1 loop
                Sink
-                 ("     <vertex x="""
-                  & Num (P.px)
-                  & """ y="""
-                  & Num (P.py)
-                  & """ z="""
-                  & Num (P.pz)
-                  & """/>"
-                  & LF);
-            end;
-         end loop;
-         Sink ("    </vertices>" & LF);
+                 ("    <component objectid=""" & Id (Part_Id) & """/>" & LF);
+            end loop;
+            Sink ("   </components>" & LF);
+            Sink ("  </object>" & LF);
+            Sink (" </resources>" & LF);
+            Sink (" <build>" & LF);
+            Sink ("  <item objectid=""" & Id (Next_Object) & """/>" & LF);
+         end if;
 
-         Sink ("    <triangles>" & LF);
-         for I in Tris.First_Index .. Tris.Last_Index loop
-            declare
-               T : constant Tri_Indices := Tris.Element (I);
-            begin
-               Sink
-                 ("     <triangle v1="""
-                  & Trim (Natural'Image (T.A), Both)
-                  & """ v2="""
-                  & Trim (Natural'Image (T.B), Both)
-                  & """ v3="""
-                  & Trim (Natural'Image (T.C), Both)
-                  & """/>"
-                  & LF);
-            end;
-         end loop;
-         Sink ("    </triangles>" & LF);
-
-         Sink ("   </mesh>" & LF);
-         Sink ("  </object>" & LF);
-         Sink (" </resources>" & LF);
-         Sink (" <build>" & LF);
-         Sink ("  <item objectid=""1""/>" & LF);
          Sink (" </build>" & LF);
          Sink ("</model>" & LF);
       end Emit_Model;
+
+      --  The settings of a coloured model for the slicer: each part is
+      --  printed with its filament, and the object itself with the one of
+      --  its last part. The ids are those given by Emit_Model.
+      function Slicer_Settings return String is
+         Result      : Unbounded_String;
+         Next_Object : Natural := Materials_Id + 1;
+         Last        : Positive := 1;
+      begin
+         for N in Sources'Range loop
+            if not Meshes (N).Tris.Is_Empty then
+               Append
+                 (Result,
+                  "  <part id="""
+                  & Id (Next_Object)
+                  & """ subtype=""normal_part"">"
+                  & LF
+                  & "   <metadata key=""name"" value="""
+                  & Escaped (Sources (N).Name)
+                  & """/>"
+                  & LF
+                  & "   <metadata key=""extruder"" value="""
+                  & Id (Sources (N).Filament)
+                  & """/>"
+                  & LF
+                  & "  </part>"
+                  & LF);
+               Next_Object := Next_Object + 1;
+               Last := Sources (N).Filament;
+            end if;
+         end loop;
+
+         return
+           "<?xml version=""1.0"" encoding=""UTF-8""?>"
+           & LF
+           & "<config>"
+           & LF
+           & " <object id="""
+           & Id (Next_Object)
+           & """>"
+           & LF
+           & "  <metadata key=""name"" value=""lithophane""/>"
+           & LF
+           & "  <metadata key=""extruder"" value="""
+           & Id (Last)
+           & """/>"
+           & LF
+           & To_String (Result)
+           & " </object>"
+           & LF
+           & "</config>"
+           & LF;
+      end Slicer_Settings;
 
       Content_Types : constant String :=
         "<?xml version=""1.0"" encoding=""UTF-8""?>"
@@ -362,6 +566,12 @@ package body Lithophane.File3mf is
         & " <Default Extension=""model"" ContentType=""application/"
         & "vnd.ms-package.3dmanufacturing-3dmodel+xml""/>"
         & LF
+        & (if Coloured
+           then
+             " <Default Extension=""config"" ContentType="
+             & """application/xml""/>"
+             & LF
+           else "")
         & "</Types>"
         & LF;
 
@@ -389,7 +599,7 @@ package body Lithophane.File3mf is
          Offset   : Unsigned_32 := 0;
       end record;
 
-      Parts : array (1 .. 3) of Part;
+      Parts : array (1 .. (if Coloured then 4 else 3)) of Part;
 
       F : Ada.Streams.Stream_IO.File_Type;
       S : Stream_Access;
@@ -496,9 +706,16 @@ package body Lithophane.File3mf is
       Parts (3).CRC := Model_CRC;
       Parts (3).Size := Unsigned_32 (Model_Len);
 
-      for I in 1 .. 2 loop
-         Parts (I).CRC := CRC32 (To_String (Parts (I).Body_T));
-         Parts (I).Size := Unsigned_32 (Length (Parts (I).Body_T));
+      if Coloured then
+         Parts (4).Name := To_Unbounded_String (Slicer_Settings_Path);
+         Parts (4).Body_T := To_Unbounded_String (Slicer_Settings);
+      end if;
+
+      for P of Parts loop
+         if not P.Streamed then
+            P.CRC := CRC32 (To_String (P.Body_T));
+            P.Size := Unsigned_32 (Length (P.Body_T));
+         end if;
       end loop;
 
       Create
@@ -541,7 +758,7 @@ package body Lithophane.File3mf is
          & " vertices, "
          & Trim (Natural'Image (Welded_Triangles), Both)
          & " triangles, from "
-         & Trim (Natural'Image (Natural (Facets_List.Length)), Both)
+         & Id (Source_Facets)
          & " facets; "
          & Num (Out_W)
          & " x "
@@ -549,6 +766,49 @@ package body Lithophane.File3mf is
          & " x "
          & Num (Out_D)
          & " mm)");
+
+      --  Which parts made it into the file: a picture without a given ink
+      --  (or without any colour at all) has no part for it.
+      if Coloured then
+         Put (Standard_Error, "Parts:");
+         for N in Sources'Range loop
+            if not Meshes (N).Tris.Is_Empty then
+               Put
+                 (Standard_Error,
+                  " "
+                  & To_String (Sources (N).Name)
+                  & " (filament"
+                  & Sources (N).Filament'Image
+                  & ")");
+            end if;
+         end loop;
+         New_Line (Standard_Error);
+      end if;
+   end Write_3mf;
+
+   --  ---------------------------------------------------------------------
+   --  Dump_3mf
+   --  ---------------------------------------------------------------------
+   procedure Dump_3mf (Facets_List : Facets.Vector; Settings : Settings_Record)
+   is
+   begin
+      Write_3mf
+        ([1 => (Mesh => Facets_List'Unchecked_Access, others => <>)],
+         Coloured => False,
+         Settings => Settings);
+   end Dump_3mf;
+
+   procedure Dump_3mf (Parts : Model_Parts; Settings : Settings_Record) is
+      Sources : Part_Refs (Parts'Range);
+   begin
+      for N in Parts'Range loop
+         Sources (N) :=
+           (Name     => Parts (N).Name,
+            Colour   => Parts (N).Colour,
+            Filament => Parts (N).Filament,
+            Mesh     => Parts (N).Mesh'Unchecked_Access);
+      end loop;
+      Write_3mf (Sources, Coloured => True, Settings => Settings);
    end Dump_3mf;
 
 end Lithophane.File3mf;

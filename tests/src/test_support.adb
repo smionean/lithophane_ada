@@ -13,6 +13,7 @@ with Ada.Strings.Fixed;
 
 with AUnit.Assertions; use AUnit.Assertions;
 
+with GNAT.Expect;
 with GNAT.OS_Lib;
 
 package body Test_Support is
@@ -171,6 +172,35 @@ package body Test_Support is
          "P6" & ASCII.LF & "4 3" & ASCII.LF & "255" & ASCII.LF & Pixels);
    end Write_Picture;
 
+   procedure Write_Colour_Picture (Path : String) is
+      type RGB is array (1 .. 3) of Natural;
+      Colours : constant array (1 .. Picture_Width * Picture_Height) of RGB :=
+        [[255, 0, 0],
+         [0, 255, 0],
+         [0, 0, 255],
+         [255, 255, 0],
+         [204, 102, 51],
+         [102, 102, 102],
+         [255, 255, 255],
+         [0, 0, 0],
+         [0, 255, 255],
+         [0, 255, 255],
+         [0, 255, 255],
+         [0, 255, 255]];
+      Pixels  : String (1 .. 3 * Colours'Length);
+      Next    : Positive := Pixels'First;
+   begin
+      for Colour of Colours loop
+         for Channel of Colour loop
+            Pixels (Next) := Character'Val (Channel);
+            Next := Next + 1;
+         end loop;
+      end loop;
+      Write_File
+        (Path,
+         "P6" & ASCII.LF & "4 3" & ASCII.LF & "255" & ASCII.LF & Pixels);
+   end Write_Colour_Picture;
+
    function Flat_Matrix
      (Width : Positive; Height : Positive; Grey : Grey_Type)
       return Matrix_Grey_Access
@@ -209,6 +239,63 @@ package body Test_Support is
       Assert (Success, "could not run " & Program & " " & Arguments);
       return Result;
    end Run;
+
+   function Run_With_Input
+     (Arguments : String; Input : String) return Run_Result
+   is
+      use GNAT.Expect;
+
+      --  Longest wait for the program to print something or to end.
+      Timeout_Ms : constant := 60_000;
+
+      Start_Dir : constant String := Dirs.Current_Directory;
+      Args      : GNAT.OS_Lib.Argument_List_Access :=
+        GNAT.OS_Lib.Argument_String_To_List (Arguments);
+      Process   : Process_Descriptor;
+      Match     : Expect_Match;
+      Timed_Out : Boolean := False;
+      Result    : Run_Result;
+   begin
+      Assert
+        (Exists (Program),
+         Program & " is missing; build the tests with ""alr build""");
+
+      Dirs.Set_Directory (Scratch_Dir);
+      Non_Blocking_Spawn
+        (Descriptor  => Process,
+         Command     => Program,
+         Args        => Args.all,
+         Err_To_Out  => True);
+      Dirs.Set_Directory (Start_Dir);
+      GNAT.OS_Lib.Free (Args);
+
+      Send (Process, Input, Add_LF => False);
+      --  End of the standard input of the program. GNAT.Expect keeps its
+      --  own Close_Input private; Close, below, closes the descriptor a
+      --  second time, which fails without harm.
+      GNAT.OS_Lib.Close (Get_Input_Fd (Process));
+
+      begin
+         loop
+            Expect (Process, Match, "(.|\n)+", Timeout_Ms);
+            if Match = Expect_Timeout then
+               Timed_Out := True;
+               exit;
+            end if;
+            SU.Append (Result.Output, Expect_Out (Process));
+         end loop;
+      exception
+         when Process_Died =>
+            SU.Append (Result.Output, Expect_Out (Process));
+      end;
+      Close (Process, Result.Status);
+
+      Assert
+        (not Timed_Out,
+         Program & " " & Arguments & " did not end; it printed: "
+         & SU.To_String (Result.Output));
+      return Result;
+   end Run_With_Input;
 
    function Printed (Result : Run_Result; Pattern : String) return Boolean
    is (Contains (SU.To_String (Result.Output), Pattern));

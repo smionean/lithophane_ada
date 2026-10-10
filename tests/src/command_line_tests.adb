@@ -144,6 +144,7 @@ package body Command_Line_Tests is
          +"--save-stl-ascii",
          +"--save-3mf",
          +"--save-pgm",
+         +"--colour",
          +"--output-name",
          +"--height",
          +"--border",
@@ -151,7 +152,8 @@ package body Command_Line_Tests is
          +"--filter",
          +"--threshold",
          +"--max-size",
-         +"--config"]
+         +"--config",
+         +"--interactive"]
       loop
          Assert
            (Printed (Result, To_String (Option)),
@@ -239,6 +241,83 @@ package body Command_Line_Tests is
       Check ("-amp", True, True, True);
       Check ("--save-stl-ascii --save-3mf --save-pgm", True, True, True);
    end Output_Formats;
+
+   --  A colour lithophane is a 3MF file made of one part per filament; no
+   --  STL file is written, whatever else is asked for.
+   procedure Colour (T : in out Test_Case) is
+      pragma Unreferenced (T);
+
+      procedure Check (Arguments : String; PGM : Boolean := False) is
+      begin
+         Run_OK (Arguments);
+         Assert_Outputs ("test", File_3MF => True, PGM => PGM);
+         declare
+            XML : constant String :=
+              To_String (Read_Zip (Scratch ("test.3mf")) (3).Data);
+         begin
+            for Part of Text_List'[+"white back",
+               +"cyan",
+               +"magenta",
+               +"yellow",
+               +"white"]
+            loop
+               Assert
+                 (Contains
+                    (XML, "name=""" & To_String (Part) & """ type=""model"""),
+                  Arguments & ": no " & To_String (Part) & " part");
+            end loop;
+            Assert
+              (Occurrences (XML, "<component ") = 5,
+               Arguments & ": the parts are not assembled");
+         end;
+         Delete_File (Scratch ("test.3mf"));
+         if PGM then
+            Delete_File (Scratch ("test.pgm"));
+         end if;
+      end Check;
+   begin
+      Write_Colour_Picture (Scratch (Picture));
+      Check ("-C " & Picture);
+      Check ("--colour " & Picture);
+      Check (Picture & " -C");
+      Check ("-C -m " & Picture);
+      Check ("-C -a -b " & Picture);
+      Check ("-Cp " & Picture, PGM => True);
+      Write_File (Scratch ("config.toml"), "colour = true" & LF);
+      Check ("-c config.toml " & Picture);
+
+      --  The height map is the black of the picture: 0 for a pure colour.
+      Run_OK ("-C -p -B 0 -t 0 " & Picture);
+      Assert
+        (Without_CR (Read_File (Scratch ("test.pgm")))
+         = "P2"
+           & LF
+           & " 4  3"
+           & LF
+           & "255"
+           & LF
+           & " 255 255 255 255"
+           & LF
+           & " 204 102 255 0"
+           & LF
+           & " 255 255 255 255"
+           & LF,
+         "unexpected height map: " & Read_File (Scratch ("test.pgm")));
+
+      --  A picture without colour gives the white parts alone.
+      Fresh_Scratch;
+      Run_OK ("-C " & Picture);
+      declare
+         XML : constant String :=
+           To_String (Read_Zip (Scratch ("test.3mf")) (3).Data);
+      begin
+         Assert
+           (Occurrences (XML, "<mesh>") = 2
+            and then Contains (XML, "name=""white back""")
+            and then Contains (XML, "name=""white"""),
+            "expected the white parts alone for a grey picture");
+      end;
+   end Colour;
 
    procedure Output_Name (T : in out Test_Case) is
       pragma Unreferenced (T);
@@ -674,6 +753,8 @@ package body Command_Line_Tests is
         (T, Default_Output'Access, "a picture alone gives test.bin.stl");
       Register_Routine
         (T, Output_Formats'Access, "-b, -a, -m, -p and their long forms");
+      Register_Routine
+        (T, Colour'Access, "-C and --colour give a 3MF file of parts");
       Register_Routine (T, Output_Name'Access, "-o and --output-name");
       Register_Routine (T, Height'Access, "-H and --height");
       Register_Routine (T, Border'Access, "-B and --border");

@@ -66,6 +66,8 @@ package body Config_Tests is
            & LF
            & "save-pgm = true"
            & LF
+           & "colour = true"
+           & LF
            & "height = 4.5"
            & LF
            & "max_size = 800"
@@ -83,6 +85,7 @@ package body Config_Tests is
       Assert (not Settings.save_as_binary, "save-binary");
       Assert (Settings.save_as_3mf, "save-3mf");
       Assert (Settings.save_pgm, "save-pgm");
+      Assert (Settings.colour, "colour");
       Assert_Near (Settings.height, 4.5, "height");
       Assert (Settings.height_is_set, "height is not flagged as given");
       Assert (Settings.max_size = 800, "max_size");
